@@ -2,7 +2,10 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Pilotage Cabinet — Suivi des tâches & des bases</title>
 <meta name="theme-color" content="#122f7e">
 <link rel="manifest" href="./manifest.webmanifest">
@@ -58,6 +61,8 @@ input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink)}
 .sidebar-foot label{display:block;color:#8fa2d4;font-size:11px;margin-bottom:4px}
 .sidebar-foot input{width:100%;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.15);border-radius:7px;color:#fff;padding:6px 9px;font-size:13px}
 .ring-wrap{display:flex;align-items:center;gap:10px;margin-top:12px}
+.nav-scrim{display:none;position:fixed;inset:0;background:rgba(10,20,50,.4);z-index:150}
+.nav-scrim.show{display:block}
 .ring-wrap .lbl{color:#9db0dd;font-size:11.5px;line-height:1.3}
 .ring-wrap .val{color:#fff;font-weight:600;font-size:14px;font-family:'Sora'}
 
@@ -224,7 +229,7 @@ td .t-sub{font-size:12px;color:var(--faint)}
 
 /* ===== Responsive ===== */
 @media(max-width:860px){
-  .sidebar{position:fixed;left:-260px;transition:left .2s;z-index:200;box-shadow:0 0 40px rgba(0,0,0,.3)}
+  .sidebar{position:fixed;left:-280px;top:0;transition:left .2s;z-index:200;box-shadow:0 0 40px rgba(0,0,0,.3)}
   .sidebar.open{left:0}
   .hamb{display:block}
   .content{padding:16px 14px 60px}
@@ -232,6 +237,67 @@ td .t-sub{font-size:12px;color:var(--faint)}
   .rsynth{grid-template-columns:repeat(2,1fr)}
   .fgrid{grid-template-columns:1fr}
   .block-fields{grid-template-columns:1fr}
+  .topbar{padding:10px 14px;gap:8px}
+  .topbar h1{font-size:16px}
+  .topbar .sub{display:none}
+  .pf-grid{grid-template-columns:1fr}
+}
+
+/* ===== Téléphone (≤560px) ===== */
+@media(max-width:560px){
+  body{font-size:14px}
+  .topbar{flex-wrap:wrap;position:sticky}
+  .topbar h1{font-size:15px}
+  /* Boutons du haut : icônes seules pour gagner la place, texte masqué */
+  #scopeSel{order:5;flex:1 1 100%;margin-top:2px}
+  .topbar .btn{padding:8px 10px}
+  .btn-tx-sm{display:none}
+  /* Sur mobile : Importer/Excel/Rapport en icône seule, bouton Tâche en libellé court */
+  #importXlsBtn .btn-tx,#exportXlsBtn .btn-tx,#printBtn .btn-tx{display:none}
+  #newTaskBtn .btn-tx{display:none}
+  #newTaskBtn .btn-tx-sm{display:inline;margin-left:3px}
+  .sync-badge #syncLbl{display:none}
+  .content{padding:12px 10px 70px}
+  .grid-kpi{grid-template-columns:repeat(2,1fr);gap:10px}
+  .kpi{padding:12px 13px}
+  .kpi .kpi-num{font-size:22px}
+  .grid-2{grid-template-columns:1fr}
+  .card{padding:14px}
+  .rsynth{grid-template-columns:repeat(2,1fr)}
+  /* Modals plein écran */
+  .overlay{padding:0;align-items:stretch}
+  .modal{max-width:none;border-radius:0;min-height:100%;padding:20px 16px}
+  .modal-foot{position:sticky;bottom:0;background:var(--card);padding:12px 0 4px;flex-wrap:wrap}
+  .modal-foot .btn{flex:1;justify-content:center}
+  /* Filtres empilés */
+  .filters{gap:8px}
+  .filters .search{min-width:0;flex:1 1 100%}
+  .filters select,.filters input[type=date]{flex:1 1 calc(50% - 5px);min-width:0}
+  .pf-contact{font-size:11.5px}
+  /* Tableaux : autoriser le scroll horizontal fluide */
+  .table-wrap,.bt-wrap{-webkit-overflow-scrolling:touch}
+  table{font-size:13px}
+  th,td{padding:9px 10px}
+  /* Suivi des bases : cases mois et saisies plus compactes au doigt */
+  .bt th,.bt td{padding:6px 5px}
+  .mcell{width:30px;height:30px}
+  .cnt-cur input{width:52px;padding:7px 3px;font-size:14px}
+  .bases-bar{gap:8px}
+  .bases-bar select{flex:1 1 calc(50% - 4px)}
+  /* Réunion / rapport */
+  .report{padding:16px 12px}
+  .report-head{flex-direction:column;gap:10px}
+  .report-head .rdate{text-align:left}
+  .ai-box{padding:14px}
+  /* Auth plein écran confort */
+  .auth-card{padding:26px 20px;border-radius:14px}
+  /* Zone de confort tactile */
+  .btn{min-height:40px}
+  .nav button{padding:11px 10px}
+}
+@media(max-width:380px){
+  .grid-kpi{grid-template-columns:1fr}
+  .rsynth{grid-template-columns:1fr}
 }
 
 /* ===== Print (rapport PDF) ===== */
@@ -343,6 +409,7 @@ td .t-sub{font-size:12px;color:var(--faint)}
 </div>
 
 <div class="app" id="appRoot" style="display:none">
+  <div class="nav-scrim" id="navScrim"></div>
 
   <aside class="sidebar" id="sidebar">
     <div class="brand"><span class="logo">◔</span> Pilotage</div>
@@ -379,12 +446,12 @@ td .t-sub{font-size:12px;color:var(--faint)}
       </div>
       <div class="spacer"></div>
       <select id="scopeSel" style="border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:var(--card);font-size:13px" title="Périmètre affiché"></select>
-      <span title="Synchronisation" style="font-size:12px;color:var(--muted)"><span class="sync-dot" id="syncDot"></span><span id="syncLbl">Synchronisé</span></span>
-      <button class="btn" id="importXlsBtn" title="Importer tâches (entreprise|tâche) ou fichier de bases (Classeur)">⬆ Importer</button>
+      <span class="sync-badge" title="Synchronisation" style="font-size:12px;color:var(--muted)"><span class="sync-dot" id="syncDot"></span><span id="syncLbl">Synchronisé</span></span>
+      <button class="btn" id="importXlsBtn" title="Importer tâches (entreprise|tâche) ou fichier de bases (Classeur)">⬆<span class="btn-tx"> Importer</span></button>
       <input type="file" id="importFile" accept=".xlsx,.xls" style="display:none">
-      <button class="btn" id="exportXlsBtn" title="Exporter toutes les tâches en Excel">⬇ Excel</button>
-      <button class="btn" id="printBtn" title="Imprimer / PDF du rapport de réunion">🖨 Rapport PDF</button>
-      <button class="btn primary" id="newTaskBtn">＋ Nouvelle tâche</button>
+      <button class="btn" id="exportXlsBtn" title="Exporter toutes les tâches en Excel">⬇<span class="btn-tx"> Excel</span></button>
+      <button class="btn" id="printBtn" title="Imprimer / PDF du rapport de réunion">🖨<span class="btn-tx"> Rapport PDF</span></button>
+      <button class="btn primary" id="newTaskBtn">＋<span class="btn-tx"> Nouvelle tâche</span><span class="btn-tx-sm">Tâche</span></button>
     </div>
 
     <div class="content">
@@ -678,11 +745,17 @@ function setView(v){
   $$('.view').forEach(x=>x.style.display='none');
   $('#view-'+v).style.display='block';
   $('#pageTitle').textContent=TITLES[v][0];$('#pageSub').textContent=TITLES[v][1];
-  $('#sidebar').classList.remove('open');
+  $('#sidebar').classList.remove('open');$('#navScrim').classList.remove('show');
   render();
 }
 $$('.nav button').forEach(b=>b.onclick=()=>setView(b.dataset.view));
-$('#hambBtn').onclick=()=>$('#sidebar').classList.toggle('open');
+function toggleNav(open){
+  const s=$('#sidebar'),sc=$('#navScrim');
+  const willOpen=open===undefined?!s.classList.contains('open'):open;
+  s.classList.toggle('open',willOpen);sc.classList.toggle('show',willOpen);
+}
+$('#hambBtn').onclick=()=>toggleNav();
+$('#navScrim').onclick=()=>toggleNav(false);
 
 /* ================= GRAPHIQUES SVG ================= */
 function donut(data,size=170){
