@@ -1,0 +1,1531 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pilotage Cabinet — Suivi des tâches & des bases</title>
+<meta name="theme-color" content="#122f7e">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+
+:root{
+  --blue:#1d4fd8; --blue-deep:#122f7e; --blue-soft:#e8eefc; --blue-line:#c7d6f7;
+  --bg:#f4f6fa; --card:#ffffff; --line:#e4e8f0;
+  --ink:#18213a; --muted:#5d6b85; --faint:#8b96ad;
+  --red:#d92d20; --red-bg:#fee4e2;
+  --orange:#dc6803; --orange-bg:#fef0c7;
+  --green:#079455; --green-bg:#dcfae6;
+  --gray-badge:#eef1f6;
+  --violet:#6941c6; --violet-bg:#f0ebfb;
+  --radius:12px;
+  --shadow:0 1px 2px rgba(18,33,74,.06), 0 4px 14px rgba(18,33,74,.05);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:'IBM Plex Sans',system-ui,sans-serif;
+  background:var(--bg); color:var(--ink);
+  font-size:14.5px; line-height:1.5;
+}
+h1,h2,h3,.kpi-num,.brand{font-family:'Sora',sans-serif}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink)}
+
+/* ===== Layout ===== */
+.app{display:flex;min-height:100vh}
+.sidebar{
+  width:238px;flex-shrink:0;background:var(--blue-deep);color:#dfe7fb;
+  display:flex;flex-direction:column;position:sticky;top:0;height:100vh;
+}
+.brand{padding:22px 20px 16px;font-size:18px;font-weight:700;color:#fff;letter-spacing:.2px;display:flex;align-items:center;gap:10px}
+.brand .logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#3b6cf0,#1d4fd8);display:flex;align-items:center;justify-content:center;font-size:15px}
+.nav{flex:1;padding:6px 12px;overflow-y:auto}
+.nav-label{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:#7f93c9;padding:14px 10px 6px}
+.nav button{
+  width:100%;display:flex;align-items:center;gap:10px;background:none;border:0;
+  color:#cdd9f6;padding:9px 10px;border-radius:8px;font-size:14px;text-align:left;
+}
+.nav button:hover{background:rgba(255,255,255,.07);color:#fff}
+.nav button.active{background:var(--blue);color:#fff;font-weight:600}
+.nav button .ic{width:18px;text-align:center;flex-shrink:0}
+.nav button .badge{margin-left:auto;background:var(--red);color:#fff;font-size:11px;font-weight:600;border-radius:99px;padding:1px 7px}
+.sidebar-foot{padding:14px 16px;border-top:1px solid rgba(255,255,255,.12);font-size:12.5px}
+.sidebar-foot label{display:block;color:#8fa2d4;font-size:11px;margin-bottom:4px}
+.sidebar-foot input{width:100%;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.15);border-radius:7px;color:#fff;padding:6px 9px;font-size:13px}
+.ring-wrap{display:flex;align-items:center;gap:10px;margin-top:12px}
+.ring-wrap .lbl{color:#9db0dd;font-size:11.5px;line-height:1.3}
+.ring-wrap .val{color:#fff;font-weight:600;font-size:14px;font-family:'Sora'}
+
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.topbar{
+  background:var(--card);border-bottom:1px solid var(--line);
+  padding:14px 26px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:30;
+}
+.topbar h1{font-size:19px;font-weight:600}
+.topbar .sub{color:var(--muted);font-size:13px}
+.topbar .spacer{flex:1}
+.hamb{display:none;background:none;border:1px solid var(--line);border-radius:8px;width:36px;height:36px;font-size:17px}
+.content{padding:24px 26px 60px;max-width:1340px;width:100%;margin:0 auto}
+
+/* ===== Buttons ===== */
+.btn{
+  border:1px solid var(--line);background:var(--card);border-radius:9px;
+  padding:8px 14px;font-size:13.5px;font-weight:500;color:var(--ink);
+  display:inline-flex;align-items:center;gap:7px;
+}
+.btn:hover{border-color:var(--blue-line);background:var(--blue-soft)}
+.btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn.primary:hover{background:#1743bb}
+.btn.danger{color:var(--red)}
+.btn.danger:hover{background:var(--red-bg);border-color:#f3b4ae}
+.btn.sm{padding:5px 10px;font-size:12.5px;border-radius:7px}
+
+/* ===== Cards / KPI ===== */
+.grid-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:22px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow)}
+.kpi .kpi-lbl{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:7px}
+.kpi .kpi-num{font-size:28px;font-weight:700;margin-top:4px}
+.kpi.alert .kpi-num{color:var(--red)}
+.kpi.good .kpi-num{color:var(--green)}
+.kpi.blue .kpi-num{color:var(--blue)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;margin-bottom:18px}
+.card h3{font-size:15px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:960px){.grid-2{grid-template-columns:1fr}}
+
+/* ===== Badges ===== */
+.badge-p,.badge-s{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;border-radius:99px;padding:2px 9px;white-space:nowrap}
+.p1{background:var(--red-bg);color:var(--red)}
+.p2{background:var(--orange-bg);color:var(--orange)}
+.p3{background:var(--blue-soft);color:var(--blue)}
+.p4{background:var(--gray-badge);color:var(--muted)}
+.s-todo{background:var(--gray-badge);color:var(--muted)}
+.s-doing{background:var(--blue-soft);color:var(--blue)}
+.s-waiting{background:var(--orange-bg);color:var(--orange)}
+.s-blocked{background:var(--red-bg);color:var(--red)}
+.s-done{background:var(--green-bg);color:var(--green)}
+.s-dropped{background:#e5e7ec;color:#6b7280;text-decoration:line-through}
+.dot{width:8px;height:8px;border-radius:99px;background:currentColor;flex-shrink:0}
+
+/* ===== Progress bar ===== */
+.pbar{height:6px;background:#e9edf5;border-radius:99px;overflow:hidden;min-width:60px}
+.pbar>div{height:100%;background:var(--blue);border-radius:99px}
+.pbar.done>div{background:var(--green)}
+
+/* ===== Table ===== */
+.table-wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+table{width:100%;border-collapse:collapse;font-size:13.5px;min-width:900px}
+th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);background:#f9fafc;white-space:nowrap}
+td{padding:11px 14px;border-bottom:1px solid #eef1f6;vertical-align:middle}
+tbody tr:hover{background:#f7f9fd;cursor:pointer}
+tbody tr:last-child td{border-bottom:0}
+td .t-title{font-weight:600}
+td .t-sub{font-size:12px;color:var(--faint)}
+.late-txt{color:var(--red);font-weight:600}
+.soon-txt{color:var(--orange);font-weight:600}
+
+/* ===== Filters ===== */
+.filters{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;align-items:center}
+.filters select,.filters input[type=date]{border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:var(--card);font-size:13px}
+.search{flex:1;min-width:200px;position:relative}
+.search input{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 12px 8px 34px;background:var(--card)}
+.search::before{content:'⌕';position:absolute;left:11px;top:6px;font-size:17px;color:var(--faint)}
+
+/* ===== Kanban ===== */
+.kanban{display:grid;grid-template-columns:repeat(5,minmax(230px,1fr));gap:14px;align-items:start;overflow-x:auto;padding-bottom:10px}
+.kcol{background:#eef1f7;border-radius:var(--radius);padding:10px;min-height:200px}
+.kcol.dragover{outline:2px dashed var(--blue);outline-offset:-2px;background:var(--blue-soft)}
+.kcol-head{display:flex;align-items:center;gap:8px;padding:4px 6px 10px;font-weight:600;font-size:13.5px}
+.kcol-head .cnt{margin-left:auto;background:#fff;border:1px solid var(--line);border-radius:99px;font-size:11.5px;padding:0 8px;color:var(--muted)}
+.kcard{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 12px;margin-bottom:9px;box-shadow:var(--shadow);cursor:grab}
+.kcard:active{cursor:grabbing}
+.kcard .kt{font-weight:600;font-size:13.5px;margin-bottom:5px}
+.kcard .km{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:var(--muted)}
+.kcard .kp{display:flex;align-items:center;gap:8px;margin-top:8px}
+.kcard .kp span{font-size:11.5px;color:var(--faint);white-space:nowrap}
+
+/* ===== Réunion ===== */
+.report{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:34px 38px;max-width:900px}
+.report-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid var(--blue);padding-bottom:16px;margin-bottom:22px}
+.report-head .rlogo{font-family:'Sora';font-weight:700;font-size:21px;color:var(--blue-deep)}
+.report-head .rlogo small{display:block;font-family:'IBM Plex Sans';font-weight:400;font-size:12.5px;color:var(--muted);margin-top:2px}
+.report-head .rdate{text-align:right;font-size:13px;color:var(--muted)}
+.report-head .rdate b{display:block;color:var(--ink);font-size:15px}
+.rsec{margin-bottom:26px}
+.rsec h3{font-size:14px;text-transform:uppercase;letter-spacing:.07em;color:var(--blue-deep);border-left:4px solid var(--blue);padding-left:10px;margin-bottom:12px}
+.rsec table{min-width:0;font-size:13px}
+.rsec .empty{color:var(--faint);font-style:italic;font-size:13px}
+.rsynth{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:26px}
+.rsynth div{background:var(--blue-soft);border-radius:9px;padding:10px 12px;text-align:center}
+.rsynth b{display:block;font-family:'Sora';font-size:21px;color:var(--blue-deep)}
+.rsynth span{font-size:11.5px;color:var(--muted)}
+.ai-box{background:linear-gradient(135deg,#f4f0ff,#eef3ff);border:1px solid #d9d3f2;border-radius:var(--radius);padding:20px;margin-bottom:18px;max-width:900px}
+.ai-box h3{color:var(--violet);font-size:15px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.ai-out{font-size:13.5px;line-height:1.65}
+.ai-out h4{font-family:'Sora';font-size:13.5px;margin:14px 0 6px;color:var(--blue-deep)}
+.ai-out ul{padding-left:20px;margin:4px 0}
+.ai-out p{margin:6px 0}
+
+/* ===== Historique / Alertes ===== */
+.hist-item{display:flex;gap:14px;padding:12px 4px;border-bottom:1px solid #eef1f6;font-size:13.5px}
+.hist-item:last-child{border-bottom:0}
+.hist-ts{color:var(--faint);font-size:12px;white-space:nowrap;width:130px;flex-shrink:0}
+.hist-body b{font-weight:600}
+.hist-user{color:var(--blue);font-size:12px}
+.alert-item{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border:1px solid var(--line);border-left-width:4px;border-radius:10px;margin-bottom:10px;background:var(--card);cursor:pointer}
+.alert-item:hover{background:#f7f9fd}
+.alert-item.red{border-left-color:var(--red)}
+.alert-item.orange{border-left-color:var(--orange)}
+.alert-item.gray{border-left-color:var(--faint)}
+.alert-item .ai-t{font-weight:600}
+.alert-item .ai-d{font-size:12.5px;color:var(--muted)}
+
+/* ===== Modal ===== */
+.overlay{position:fixed;inset:0;background:rgba(15,25,55,.45);display:none;align-items:flex-start;justify-content:center;z-index:100;padding:30px 14px;overflow-y:auto}
+.overlay.open{display:flex}
+.modal{background:var(--card);border-radius:14px;width:100%;max-width:760px;padding:26px 28px;box-shadow:0 20px 60px rgba(10,20,50,.3)}
+.modal h2{font-size:17px;margin-bottom:18px}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:13px 16px}
+.fgrid .full{grid-column:1/-1}
+.fld label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px}
+.fld input,.fld select,.fld textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 11px;background:#fff}
+.fld input:focus,.fld select:focus,.fld textarea:focus{outline:2px solid var(--blue-line);border-color:var(--blue)}
+.fld textarea{resize:vertical;min-height:60px}
+.block-fields{grid-column:1/-1;background:var(--red-bg);border-radius:10px;padding:12px;display:none;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.block-fields.show{display:grid}
+.block-fields label{color:var(--red)}
+.modal-foot{display:flex;gap:10px;margin-top:22px;justify-content:flex-end;align-items:center}
+.range-wrap{display:flex;align-items:center;gap:10px}
+.range-wrap input[type=range]{flex:1}
+.range-val{font-weight:600;font-family:'Sora';width:44px;text-align:right}
+
+/* ===== Portefeuille ===== */
+.pf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;align-items:start}
+.pf-card{margin-bottom:0}
+.pf-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.pf-stats{display:flex;flex-wrap:wrap;gap:12px;font-size:12.5px;color:var(--muted)}
+.pf-list{display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto}
+.pf-task{display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid #eef1f6;border-radius:8px;cursor:pointer;font-size:13px}
+.pf-task:hover{background:#f7f9fd;border-color:var(--blue-line)}
+.pf-task .pf-tt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.empty-state{text-align:center;padding:50px 20px;color:var(--muted)}
+.empty-state .big{font-size:38px;margin-bottom:10px}
+.section-note{font-size:12.5px;color:var(--faint);margin:-8px 0 16px}
+.chart-svg{width:100%;height:auto;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;font-size:12.5px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+/* ===== Responsive ===== */
+@media(max-width:860px){
+  .sidebar{position:fixed;left:-260px;transition:left .2s;z-index:200;box-shadow:0 0 40px rgba(0,0,0,.3)}
+  .sidebar.open{left:0}
+  .hamb{display:block}
+  .content{padding:16px 14px 60px}
+  .report{padding:22px 18px}
+  .rsynth{grid-template-columns:repeat(2,1fr)}
+  .fgrid{grid-template-columns:1fr}
+  .block-fields{grid-template-columns:1fr}
+}
+
+/* ===== Print (rapport PDF) ===== */
+@media print{
+  body{background:#fff}
+  .sidebar,.topbar,.no-print,.ai-box .btn{display:none!important}
+  .content{padding:0;max-width:none}
+  .report{border:0;box-shadow:none;padding:0;max-width:none}
+  .view{display:none!important}
+  #view-meeting{display:block!important}
+}
+
+/* ===== Auth / Setup ===== */
+.auth-wrap{position:fixed;inset:0;background:linear-gradient(160deg,#122f7e,#1d4fd8);display:flex;align-items:center;justify-content:center;z-index:500;padding:16px}
+.auth-card{background:#fff;border-radius:16px;padding:34px 32px;width:100%;max-width:400px;box-shadow:0 24px 70px rgba(5,15,45,.45)}
+.auth-card .brand{padding:0 0 6px;color:var(--blue-deep);font-size:21px}
+.auth-card .brand .logo{background:linear-gradient(135deg,#3b6cf0,#1d4fd8);color:#fff}
+.auth-sub{color:var(--muted);font-size:13px;margin-bottom:20px}
+.auth-card .fld{margin-bottom:13px}
+.auth-err{color:var(--red);font-size:13px;margin:8px 0;display:none}
+.auth-alt{margin-top:16px;font-size:12.5px;color:var(--muted);text-align:center}
+.auth-alt a{color:var(--blue);cursor:pointer;text-decoration:underline}
+.wfull{width:100%;justify-content:center;padding:10px}
+
+/* ===== Portefeuille ===== */
+.pf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;align-items:start}
+.pf-card{margin-bottom:0}
+.pf-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px}
+.pf-resp{font-size:12px;color:var(--muted);margin-bottom:8px}
+.pf-stats{display:flex;flex-wrap:wrap;gap:12px;font-size:12.5px;color:var(--muted)}
+.pf-list{display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto}
+.pf-task{display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid #eef1f6;border-radius:8px;cursor:pointer;font-size:13px}
+.pf-task:hover{background:#f7f9fd;border-color:var(--blue-line)}
+.pf-task .pf-tt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ===== Suivi des bases ===== */
+.bases-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
+.bases-bar select,.bases-bar input{border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:var(--card);font-size:13.5px}
+.bt-wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:20px}
+.bt{border-collapse:collapse;font-size:12.5px;min-width:100%}
+.bt th{position:sticky;top:0;background:#f9fafc;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:8px 6px;border-bottom:1px solid var(--line);text-align:center;white-space:nowrap}
+.bt th.lft,.bt td.lft{text-align:left;padding-left:12px}
+.bt td{padding:6px;border-bottom:1px solid #eef1f6;text-align:center}
+.bt tbody tr:hover{background:#f7f9fd}
+.bt .code{font-weight:600;white-space:nowrap}
+.bt .lib{color:var(--muted);white-space:nowrap;max-width:170px;overflow:hidden;text-overflow:ellipsis}
+.mcell{width:34px;height:26px;cursor:pointer;user-select:none;border-radius:6px;font-weight:700}
+.mcell.on{background:var(--green-bg);color:var(--green)}
+.mcell:hover{outline:2px solid var(--blue-line)}
+.cnt-prev{color:var(--faint);font-variant-numeric:tabular-nums}
+.cnt-cur input{width:62px;text-align:center;border:1px solid var(--line);border-radius:7px;padding:5px 4px;font-size:13px}
+.delta{font-size:11.5px;font-weight:700;border-radius:99px;padding:1px 7px;white-space:nowrap}
+.delta.up{background:var(--green-bg);color:var(--green)}
+.delta.zero{background:var(--gray-badge);color:var(--muted)}
+.delta.dn{background:var(--red-bg);color:var(--red)}
+.jdel{border:0;background:none;color:var(--faint);font-size:14px;cursor:pointer}
+.jdel:hover{color:var(--red)}
+.badge-type{font-size:11px;font-weight:600;border-radius:99px;padding:2px 9px;background:var(--blue-soft);color:var(--blue)}
+.badge-type.annuel{background:var(--violet-bg);color:var(--violet)}
+.badge-role{font-size:11px;font-weight:700;border-radius:99px;padding:2px 9px;background:var(--gray-badge);color:var(--muted)}
+.badge-role.admin{background:var(--orange-bg);color:var(--orange)}
+.addrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px;background:#f9fafc;border-top:1px solid var(--line)}
+.addrow input{border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:13px}
+.sync-dot{width:9px;height:9px;border-radius:99px;background:var(--green);display:inline-block;margin-right:6px}
+.sync-dot.off{background:var(--red)}
+.me-chip{font-size:12.5px;color:#9db0dd}
+.me-chip b{color:#fff;font-family:'Sora';font-size:13px;display:block}
+@media(max-width:860px){.bases-bar{gap:8px}.bt{font-size:12px}}
+</style>
+</head>
+<body>
+
+<!-- Écran de configuration (1er lancement) -->
+<div class="auth-wrap" id="setupScreen" style="display:none">
+  <div class="auth-card">
+    <div class="brand"><span class="logo">◔</span> Pilotage Cabinet</div>
+    <div class="auth-sub">Première configuration : renseignez les identifiants de votre projet Supabase (Settings → API). À faire une seule fois par appareil.</div>
+    <div class="fld"><label>URL du projet Supabase</label><input id="cfgUrl" placeholder="https://xxxx.supabase.co"></div>
+    <div class="fld"><label>Clé « anon public »</label><input id="cfgKey" placeholder="eyJhbGciOi…"></div>
+    <div class="auth-err" id="cfgErr"></div>
+    <button class="btn primary wfull" id="cfgSave">Enregistrer et continuer</button>
+  </div>
+</div>
+
+<!-- Écran de connexion -->
+<div class="auth-wrap" id="loginScreen" style="display:none">
+  <div class="auth-card">
+    <div class="brand"><span class="logo">◔</span> Pilotage Cabinet</div>
+    <div class="auth-sub">Connectez-vous avec le compte créé par votre administrateur.</div>
+    <div class="fld"><label>Nom d'utilisateur</label><input id="loginUser" autocomplete="username" placeholder="ex : ondiaye"></div>
+    <div class="fld"><label>Mot de passe</label><input id="loginPass" type="password" autocomplete="current-password"></div>
+    <div class="auth-err" id="loginErr"></div>
+    <button class="btn primary wfull" id="loginBtn">Se connecter</button>
+    <div class="auth-alt">Première utilisation du cabinet ?<br><a id="showFirstAdmin">Créer le compte administrateur</a></div>
+    <div id="firstAdminBox" style="display:none;margin-top:14px;border-top:1px solid var(--line);padding-top:14px">
+      <div class="fld"><label>Nom complet</label><input id="faName" placeholder="El Hadji Ousmane Ndiaye"></div>
+      <div class="fld"><label>Nom d'utilisateur</label><input id="faUser" placeholder="ondiaye"></div>
+      <div class="fld"><label>Mot de passe (8 caractères min.)</label><input id="faPass" type="password"></div>
+      <button class="btn primary wfull" id="faBtn">Créer le compte admin</button>
+      <div class="auth-alt" style="margin-top:8px">Le tout premier compte devient automatiquement administrateur.</div>
+    </div>
+    <div class="auth-alt"><a id="resetCfg">Modifier la configuration Supabase</a></div>
+  </div>
+</div>
+
+<div class="app" id="appRoot" style="display:none">
+
+  <aside class="sidebar" id="sidebar">
+    <div class="brand"><span class="logo">◔</span> Pilotage</div>
+    <nav class="nav">
+      <div class="nav-label">Pilotage</div>
+      <button data-view="dash" class="active"><span class="ic">▦</span> Tableau de bord</button>
+      <button data-view="meeting"><span class="ic">🗓</span> Réunion du lundi</button>
+      <button data-view="alerts"><span class="ic">🔔</span> Alertes <span class="badge" id="alertCount" style="display:none">0</span></button>
+      <div class="nav-label">Travail</div>
+      <button data-view="portfolio"><span class="ic">🗂</span> Portefeuille clients</button>
+      <button data-view="tasks"><span class="ic">☰</span> Tâches</button>
+      <button data-view="kanban"><span class="ic">▥</span> Kanban</button>
+      <button data-view="bases"><span class="ic">▤</span> Suivi des bases</button>
+      <div class="nav-label">Suivi</div>
+      <button data-view="history"><span class="ic">🕘</span> Historique</button>
+      <button data-view="admin" id="navAdmin" style="display:none"><span class="ic">👥</span> Utilisateurs</button>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="me-chip" id="meChip"><b>—</b>—</div>
+      <div class="ring-wrap">
+        <svg width="46" height="46" viewBox="0 0 46 46" id="sideRing"></svg>
+        <div><div class="lbl">Avancement<br>global</div><div class="val" id="sideRingVal">0%</div></div>
+      </div>
+      <button class="btn sm wfull" id="logoutBtn" style="margin-top:12px">Se déconnecter</button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <button class="hamb" id="hambBtn">☰</button>
+      <div>
+        <h1 id="pageTitle">Tableau de bord</h1>
+        <div class="sub" id="pageSub"></div>
+      </div>
+      <div class="spacer"></div>
+      <select id="scopeSel" style="border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:var(--card);font-size:13px" title="Périmètre affiché"></select>
+      <span title="Synchronisation" style="font-size:12px;color:var(--muted)"><span class="sync-dot" id="syncDot"></span><span id="syncLbl">Synchronisé</span></span>
+      <button class="btn" id="importXlsBtn" title="Importer tâches (entreprise|tâche) ou fichier de bases (Classeur)">⬆ Importer</button>
+      <input type="file" id="importFile" accept=".xlsx,.xls" style="display:none">
+      <button class="btn" id="exportXlsBtn" title="Exporter toutes les tâches en Excel">⬇ Excel</button>
+      <button class="btn" id="printBtn" title="Imprimer / PDF du rapport de réunion">🖨 Rapport PDF</button>
+      <button class="btn primary" id="newTaskBtn">＋ Nouvelle tâche</button>
+    </div>
+
+    <div class="content">
+      <div id="view-dash" class="view"></div>
+      <div id="view-portfolio" class="view" style="display:none"></div>
+      <div id="view-tasks" class="view" style="display:none"></div>
+      <div id="view-kanban" class="view" style="display:none"></div>
+      <div id="view-bases" class="view" style="display:none"></div>
+      <div id="view-meeting" class="view" style="display:none"></div>
+      <div id="view-alerts" class="view" style="display:none"></div>
+      <div id="view-history" class="view" style="display:none"></div>
+      <div id="view-admin" class="view" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal tâche -->
+<div class="overlay" id="taskOverlay">
+  <div class="modal">
+    <h2 id="modalTitle">Nouvelle tâche</h2>
+    <div class="fgrid">
+      <div class="fld full"><label>Intitulé de la tâche *</label><input id="f_title" placeholder="Ex : Régulariser toutes les BRS"></div>
+      <div class="fld full"><label>Description détaillée</label><textarea id="f_desc"></textarea></div>
+      <div class="fld"><label>Client / Dossier</label><select id="f_client"><option value="">— Aucun —</option></select></div>
+      <div class="fld"><label>Catégorie</label>
+        <select id="f_category">
+          <option>Client</option><option>Interne cabinet</option><option>Administratif</option>
+          <option>Management</option><option>Formation</option><option>Personnel</option>
+        </select>
+      </div>
+      <div class="fld"><label>Responsable</label><select id="f_assignee"><option value="">— Non assigné —</option></select></div>
+      <div class="fld"><label>Durée estimée</label><input id="f_duration" placeholder="Ex : 3 h, 2 jours"></div>
+      <div class="fld"><label>Date de début prévue</label><input type="date" id="f_start"></div>
+      <div class="fld"><label>Date limite</label><input type="date" id="f_due"></div>
+      <div class="fld"><label>Priorité</label>
+        <select id="f_priority">
+          <option value="p1">🔴 Urgent / Critique</option>
+          <option value="p2">🟠 Important</option>
+          <option value="p3" selected>🔵 Normal</option>
+          <option value="p4">⚪ Faible priorité</option>
+        </select>
+      </div>
+      <div class="fld"><label>Statut</label>
+        <select id="f_status">
+          <option value="todo">⚪ À faire</option>
+          <option value="doing">🔵 En cours</option>
+          <option value="waiting">🟠 En attente d'information</option>
+          <option value="blocked">🔴 Bloqué</option>
+          <option value="done">🟢 Terminé</option>
+          <option value="dropped">⚫ Abandonné</option>
+        </select>
+      </div>
+      <div class="block-fields" id="blockFields">
+        <div class="fld"><label>Cause du blocage</label><input id="f_blockCause"></div>
+        <div class="fld"><label>Action nécessaire</label><input id="f_blockAction"></div>
+        <div class="fld"><label>Personne attendue</label><input id="f_blockPerson"></div>
+      </div>
+      <div class="fld full"><label>Avancement</label>
+        <div class="range-wrap"><input type="range" id="f_progress" min="0" max="100" step="5" value="0"><span class="range-val" id="f_progressVal">0%</span></div>
+      </div>
+      <div class="fld"><label>Dernière action réalisée</label><input id="f_lastAction"></div>
+      <div class="fld"><label>Prochaine action à réaliser</label><input id="f_nextAction"></div>
+      <div class="fld full"><label>Commentaires / notes / difficultés</label><textarea id="f_comments"></textarea></div>
+    </div>
+    <div class="modal-foot">
+      <span id="taskIdLbl" style="margin-right:auto;color:var(--faint);font-size:12px"></span>
+      <button class="btn danger" id="deleteTaskBtn" style="display:none">Supprimer</button>
+      <button class="btn" id="cancelTaskBtn">Annuler</button>
+      <button class="btn primary" id="saveTaskBtn">Enregistrer</button>
+    </div>
+  </div>
+</div>
+<script>
+/* ================= CONFIGURATION SUPABASE ================= */
+const CFGKEY='pilotage:cfg';
+let memCfg=null;
+function getCfg(){
+  if(memCfg)return memCfg;
+  try{const v=localStorage.getItem(CFGKEY);if(v)return memCfg=JSON.parse(v);}catch(e){}
+  return null;
+}
+function setCfg(c){memCfg=c;try{localStorage.setItem(CFGKEY,JSON.stringify(c));}catch(e){}}
+
+let sb=null,me=null,rtChannel=null;
+let DB={profiles:[],clients:[],tasks:[],history:[],journals:[],months:[],counts:[]};
+let currentView='dash',editingId=null,scope='me';
+let basesClient='',basesYear=new Date().getFullYear();
+let filters={q:'',client:'',category:'',assignee:'',priority:'',status:'',due:''};
+
+const CATS=['Client','Interne cabinet','Administratif','Management','Formation','Personnel'];
+const MONTHS=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+const MONTHS_S=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc'];
+const PRIO={p1:{lbl:'Urgent / Critique',ic:'🔴',cls:'p1',rank:1,color:'#d92d20'},
+            p2:{lbl:'Important',ic:'🟠',cls:'p2',rank:2,color:'#dc6803'},
+            p3:{lbl:'Normal',ic:'🔵',cls:'p3',rank:3,color:'#1d4fd8'},
+            p4:{lbl:'Faible priorité',ic:'⚪',cls:'p4',rank:4,color:'#8b96ad'}};
+const STAT={todo:{lbl:'À faire',cls:'s-todo',color:'#8b96ad'},
+            doing:{lbl:'En cours',cls:'s-doing',color:'#1d4fd8'},
+            waiting:{lbl:"En attente d'information",cls:'s-waiting',color:'#dc6803'},
+            blocked:{lbl:'Bloqué',cls:'s-blocked',color:'#d92d20'},
+            done:{lbl:'Terminé',cls:'s-done',color:'#079455'},
+            dropped:{lbl:'Abandonné',cls:'s-dropped',color:'#6b7280'}};
+const KANBAN_COLS=['todo','doing','waiting','blocked','done'];
+
+const $=s=>document.querySelector(s);
+const $$=s=>[...document.querySelectorAll(s)];
+const esc=s=>(s??'').toString().replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const today=()=>{const d=new Date();d.setHours(0,0,0,0);return d};
+const iso=d=>d.toISOString().slice(0,10);
+const mondayOf=d=>{const x=new Date(d);x.setHours(0,0,0,0);x.setDate(x.getDate()-((x.getDay()+6)%7));return x};
+const fmtD=s=>{if(!s)return '—';const d=new Date(s.slice(0,10)+'T00:00:00');return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'})};
+const fmtDs=s=>{const d=new Date(s.slice(0,10)+'T00:00:00');return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'})};
+const fmtTS=t=>new Date(t).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+const daysTo=s=>{if(!s)return null;return Math.round((new Date(s.slice(0,10)+'T00:00:00')-today())/864e5)};
+const isLate=t=>t.due_date&&!['done','dropped'].includes(t.status)&&daysTo(t.due_date)<0;
+const isSoon=t=>t.due_date&&!['done','dropped'].includes(t.status)&&daysTo(t.due_date)>=0&&daysTo(t.due_date)<=3;
+const isStale=t=>!['done','dropped'].includes(t.status)&&(Date.now()-Date.parse(t.updated_at))/864e5>=5;
+const tnum=t=>'T-'+String(t.num).padStart(3,'0');
+const clientName=id=>{const c=DB.clients.find(c=>c.id===id);return c?c.name:''};
+const profName=id=>{const p=DB.profiles.find(p=>p.id===id);return p?p.full_name:''};
+const clientResp=c=>c.responsible_id?profName(c.responsible_id):(c.responsible_name||'');
+const setSync=ok=>{$('#syncDot').classList.toggle('off',!ok);$('#syncLbl').textContent=ok?'Synchronisé':'Hors ligne';};
+
+/* ================= AUTH & CHARGEMENT ================= */
+async function boot(){
+  const cfg=getCfg();
+  if(!cfg||!cfg.url||!cfg.key){$('#setupScreen').style.display='flex';return;}
+  sb=supabase.createClient(cfg.url,cfg.key);
+  const {data:{session}}=await sb.auth.getSession();
+  if(session)await enter();else $('#loginScreen').style.display='flex';
+}
+async function enter(){
+  const {data:{user}}=await sb.auth.getUser();
+  const {data:prof,error}=await sb.from('profiles').select('*').eq('id',user.id).single();
+  if(error||!prof){authErr('#loginErr','Profil introuvable. Contactez votre administrateur.');await sb.auth.signOut();$('#loginScreen').style.display='flex';return;}
+  me=prof;
+  $('#loginScreen').style.display='none';$('#setupScreen').style.display='none';
+  $('#appRoot').style.display='flex';
+  $('#meChip').innerHTML=`<b>${esc(me.full_name)}</b>${me.role==='admin'?'Administrateur':'Collaborateur'}`;
+  $('#navAdmin').style.display=me.role==='admin'?'flex':'none';
+  scope=me.role==='admin'?'all':'me';
+  await loadAll();
+  buildScopeSel();
+  startRealtime();
+  setView('dash');
+}
+function authErr(sel,msg){const e=$(sel);e.textContent=msg;e.style.display='block';}
+async function loadAll(){
+  try{
+    const [p,c,t,h,j,m,pc]=await Promise.all([
+      sb.from('profiles').select('*').order('full_name'),
+      sb.from('clients').select('*').order('name'),
+      sb.from('tasks').select('*').order('num'),
+      sb.from('task_history').select('*').order('ts',{ascending:false}).limit(300),
+      sb.from('journals').select('*').order('position').order('code'),
+      sb.from('journal_months').select('*'),
+      sb.from('piece_counts').select('*').order('week_date'),
+    ]);
+    for(const r of [p,c,t,h,j,m,pc])if(r.error)throw r.error;
+    DB={profiles:p.data,clients:c.data,tasks:t.data,history:h.data,journals:j.data,months:m.data,counts:pc.data};
+    setSync(true);
+  }catch(e){console.error(e);setSync(false);}
+}
+let rtTimer=null;
+function startRealtime(){
+  if(rtChannel)return;
+  rtChannel=sb.channel('sync');
+  ['tasks','piece_counts','journal_months','journals','clients'].forEach(tb=>
+    rtChannel.on('postgres_changes',{event:'*',schema:'public',table:tb},()=>{
+      clearTimeout(rtTimer);rtTimer=setTimeout(async()=>{await loadAll();render();},700);
+    }));
+  rtChannel.subscribe();
+}
+
+/* --- Écrans config / connexion --- */
+$('#cfgSave').onclick=()=>{
+  const url=$('#cfgUrl').value.trim().replace(/\/+$/,''),key=$('#cfgKey').value.trim();
+  if(!url.startsWith('https://')||!key){authErr('#cfgErr','URL ou clé invalide.');return;}
+  setCfg({url,key});$('#setupScreen').style.display='none';boot();
+};
+$('#resetCfg').onclick=()=>{setCfg({});memCfg=null;try{localStorage.removeItem(CFGKEY);}catch(e){}
+  $('#loginScreen').style.display='none';$('#setupScreen').style.display='flex';};
+$('#showFirstAdmin').onclick=()=>{const b=$('#firstAdminBox');b.style.display=b.style.display==='none'?'block':'none';};
+$('#loginBtn').onclick=doLogin;
+$('#loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+async function doLogin(){
+  const u=$('#loginUser').value.trim().toLowerCase(),p=$('#loginPass').value;
+  if(!u||!p)return authErr('#loginErr','Renseignez vos identifiants.');
+  $('#loginErr').style.display='none';
+  const {error}=await sb.auth.signInWithPassword({email:u+'@cabinet.local',password:p});
+  if(error)return authErr('#loginErr','Identifiants incorrects.');
+  await enter();
+}
+$('#faBtn').onclick=async()=>{
+  const name=$('#faName').value.trim(),u=$('#faUser').value.trim().toLowerCase().replace(/[^a-z0-9._-]/g,''),p=$('#faPass').value;
+  if(!name||!u||p.length<8)return authErr('#loginErr','Complétez les champs (mot de passe : 8 caractères min.).');
+  const {error}=await sb.auth.signUp({email:u+'@cabinet.local',password:p,options:{data:{username:u,full_name:name}}});
+  if(error)return authErr('#loginErr','Création impossible : '+error.message);
+  await enter();
+};
+$('#logoutBtn').onclick=async()=>{await sb.auth.signOut();location.reload();};
+
+/* ================= PÉRIMÈTRE ================= */
+function buildScopeSel(){
+  const s=$('#scopeSel');
+  s.innerHTML=`<option value="me">👤 Mes tâches</option><option value="all">🏢 Tout le cabinet</option>`+
+    DB.profiles.filter(p=>p.id!==me.id).map(p=>`<option value="${p.id}">${esc(p.full_name)}</option>`).join('');
+  s.value=scope;
+  s.onchange=()=>{scope=s.value;render();};
+}
+function scoped(){
+  if(scope==='all')return DB.tasks;
+  const uid=scope==='me'?me.id:scope;
+  return DB.tasks.filter(t=>t.assignee_id===uid||(scope==='me'&&!t.assignee_id&&t.created_by===me.id));
+}
+function scopeName(){return scope==='all'?'Tout le cabinet':scope==='me'?me.full_name:profName(scope);}
+
+/* ================= HISTORIQUE ================= */
+async function log(taskId,taskTitle,change){
+  const row={task_id:taskId,task_title:taskTitle,user_name:me.full_name,change};
+  DB.history.unshift({...row,ts:new Date().toISOString()});
+  sb.from('task_history').insert(row).then(({error})=>{if(error)setSync(false);});
+}
+/* ================= NAVIGATION ================= */
+const TITLES={dash:['Tableau de bord','Vue synthétique avant réunion'],
+  portfolio:['Portefeuille clients','Dossiers du cabinet regroupés par responsable'],
+  tasks:['Tâches','Liste complète, filtres et recherche'],
+  kanban:['Vue Kanban','Glissez-déposez les cartes pour changer de statut'],
+  bases:['Suivi des bases','Tenue comptable, déclarations et pièces hebdomadaires'],
+  meeting:['Réunion du lundi','Rapport hebdomadaire généré automatiquement'],
+  alerts:['Alertes & rappels','Échéances proches, retards et tâches à mettre à jour'],
+  history:['Historique','Traçabilité complète des modifications'],
+  admin:['Utilisateurs','Gestion des comptes collaborateurs']};
+function setView(v){
+  currentView=v;
+  $$('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
+  $$('.view').forEach(x=>x.style.display='none');
+  $('#view-'+v).style.display='block';
+  $('#pageTitle').textContent=TITLES[v][0];$('#pageSub').textContent=TITLES[v][1];
+  $('#sidebar').classList.remove('open');
+  render();
+}
+$$('.nav button').forEach(b=>b.onclick=()=>setView(b.dataset.view));
+$('#hambBtn').onclick=()=>$('#sidebar').classList.toggle('open');
+
+/* ================= GRAPHIQUES SVG ================= */
+function donut(data,size=170){
+  const total=data.reduce((a,b)=>a+b.v,0);
+  if(!total)return '<div class="empty-state">Aucune donnée</div>';
+  const cx=size/2,cy=size/2,r=size/2-14,sw=26;let a0=-Math.PI/2,paths='';
+  data.filter(d=>d.v>0).forEach(d=>{
+    const a1=a0+d.v/total*2*Math.PI;const large=(a1-a0)>Math.PI?1:0;
+    const x0=cx+r*Math.cos(a0),y0=cy+r*Math.sin(a0),x1=cx+r*Math.cos(a1-.004),y1=cy+r*Math.sin(a1-.004);
+    paths+=`<path d="M ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1}" stroke="${d.c}" stroke-width="${sw}" fill="none"/>`;
+    a0=a1;
+  });
+  return `<svg class="chart-svg" viewBox="0 0 ${size} ${size}" style="max-width:${size}px;margin:0 auto">${paths}
+    <text x="${cx}" y="${cy-2}" text-anchor="middle" font-family="Sora" font-weight="700" font-size="26" fill="#18213a">${total}</text>
+    <text x="${cx}" y="${cy+18}" text-anchor="middle" font-size="11" fill="#8b96ad">tâches</text></svg>`;
+}
+function hbars(data){
+  const max=Math.max(1,...data.map(d=>d.v));const h=data.length*34+6;let rows='';
+  data.forEach((d,i)=>{const y=i*34+4;const w=d.v/max*260;
+    rows+=`<text x="0" y="${y+15}" font-size="12" fill="#5d6b85">${esc(d.l)}</text>
+      <rect x="150" y="${y+3}" width="260" height="16" rx="8" fill="#eef1f6"/>
+      <rect x="150" y="${y+3}" width="${Math.max(2,w)}" height="16" rx="8" fill="${d.c}"/>
+      <text x="418" y="${y+16}" font-size="12" font-weight="600" fill="#18213a">${d.v}</text>`;});
+  return `<svg class="chart-svg" viewBox="0 0 445 ${h}">${rows}</svg>`;
+}
+function lineChart(points){
+  const w=440,h=160,pl=30,pb=26;const max=Math.max(1,...points.map(p=>p.v));
+  const xs=i=>pl+i*((w-pl-10)/Math.max(1,points.length-1));
+  const ys=v=>h-pb-(v/max)*(h-pb-14);
+  let path='',dots='',labels='',grid='';
+  for(let g=0;g<=2;g++){const y=ys(max*g/2);grid+=`<line x1="${pl}" y1="${y}" x2="${w-8}" y2="${y}" stroke="#eef1f6"/><text x="${pl-6}" y="${y+4}" text-anchor="end" font-size="10" fill="#8b96ad">${Math.round(max*g/2)}</text>`;}
+  points.forEach((p,i)=>{path+=(i?'L':'M')+xs(i)+' '+ys(p.v)+' ';
+    dots+=`<circle cx="${xs(i)}" cy="${ys(p.v)}" r="3.5" fill="#1d4fd8"/>`;
+    labels+=`<text x="${xs(i)}" y="${h-8}" text-anchor="middle" font-size="10" fill="#8b96ad">${p.l}</text>`;});
+  return `<svg class="chart-svg" viewBox="0 0 ${w} ${h}">${grid}<path d="${path}" fill="none" stroke="#1d4fd8" stroke-width="2.5" stroke-linejoin="round"/>${dots}${labels}</svg>`;
+}
+function ring(pct){
+  const r=18,c=2*Math.PI*r;
+  $('#sideRing').innerHTML=`<circle cx="23" cy="23" r="${r}" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="5"/>
+    <circle cx="23" cy="23" r="${r}" fill="none" stroke="#5b8bf7" stroke-width="5" stroke-linecap="round"
+      stroke-dasharray="${c}" stroke-dashoffset="${c*(1-pct/100)}" transform="rotate(-90 23 23)"/>`;
+  $('#sideRingVal').textContent=Math.round(pct)+'%';
+}
+
+/* ================= STATS & ALERTES ================= */
+function stats(){
+  const T=scoped(),active=T.filter(t=>t.status!=='dropped');
+  const startWeek=mondayOf(today());const endWeek=new Date(startWeek);endWeek.setDate(endWeek.getDate()+6);
+  const thisWeek=active.filter(t=>t.due_date&&new Date(t.due_date+'T00:00:00')>=startWeek&&new Date(t.due_date+'T00:00:00')<=endWeek);
+  const pct=active.length?active.reduce((a,t)=>a+(t.status==='done'?100:t.progress),0)/active.length:0;
+  return{total:T.length,done:T.filter(t=>t.status==='done').length,doing:T.filter(t=>t.status==='doing').length,
+    late:T.filter(isLate).length,urgent:T.filter(t=>t.priority==='p1'&&!['done','dropped'].includes(t.status)).length,
+    week:thisWeek.length,pct};
+}
+function alertsList(){
+  const a=[];const T=scoped();
+  T.forEach(t=>{
+    if(isLate(t))a.push({type:'red',ic:'⛔',t,title:'Tâche en retard',desc:`Échéance dépassée de ${-daysTo(t.due_date)} jour(s) — ${fmtD(t.due_date)}`});
+    else if(isSoon(t))a.push({type:'orange',ic:'⏰',t,title:'Échéance proche',desc:`À rendre ${daysTo(t.due_date)===0?'aujourd\u2019hui':'dans '+daysTo(t.due_date)+' jour(s)'} — ${fmtD(t.due_date)}`});
+  });
+  T.filter(isStale).forEach(t=>a.push({type:'gray',ic:'💤',t,title:'Tâche non mise à jour',desc:`Aucune mise à jour depuis ${Math.floor((Date.now()-Date.parse(t.updated_at))/864e5)} jours`}));
+  return a;
+}
+
+/* ================= RENDU ================= */
+function render(){
+  if(!me)return;
+  const s=stats();ring(s.pct);
+  const al=alertsList();
+  const ac=$('#alertCount');ac.style.display=al.length?'inline-block':'none';ac.textContent=al.length;
+  ({dash:renderDash,portfolio:renderPortfolio,tasks:renderTasks,kanban:renderKanban,bases:renderBases,
+    meeting:renderMeeting,alerts:renderAlerts,history:renderHistory,admin:renderAdmin})[currentView]();
+}
+const kpi=(l,v,cls)=>`<div class="kpi ${cls}"><div class="kpi-lbl">${l}</div><div class="kpi-num">${v}</div></div>`;
+
+function renderDash(){
+  const s=stats();const T=scoped();
+  const byStatus=Object.keys(STAT).map(k=>({l:STAT[k].lbl,v:T.filter(t=>t.status===k).length,c:STAT[k].color}));
+  const byPrio=Object.keys(PRIO).map(k=>({l:PRIO[k].ic+' '+PRIO[k].lbl,v:T.filter(t=>t.priority===k).length,c:PRIO[k].color}));
+  const byCat=CATS.map((c,i)=>({l:c,v:T.filter(t=>t.category===c&&t.status!=='dropped').length,c:['#1d4fd8','#4e7bf0','#7ba0f5','#dc6803','#079455','#6941c6'][i]})).filter(d=>d.v>0);
+  const weeks=[];
+  for(let i=7;i>=0;i--){
+    const start=mondayOf(today());start.setDate(start.getDate()-i*7);
+    const end=new Date(start);end.setDate(end.getDate()+7);
+    weeks.push({l:start.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'}),
+      v:T.filter(t=>t.completed_at&&Date.parse(t.completed_at)>=start.getTime()&&Date.parse(t.completed_at)<end.getTime()).length});
+  }
+  const urgentList=T.filter(t=>!['done','dropped'].includes(t.status)&&(t.priority==='p1'||isLate(t)))
+    .sort((a,b)=>PRIO[a.priority].rank-PRIO[b.priority].rank).slice(0,5);
+  $('#view-dash').innerHTML=`
+    <div class="section-note">Périmètre : <b>${esc(scopeName())}</b></div>
+    <div class="grid-kpi">
+      ${kpi('Tâches totales',s.total,'')}${kpi('Terminées',s.done,'good')}${kpi('En cours',s.doing,'blue')}
+      ${kpi('En retard',s.late,s.late?'alert':'')}${kpi('Prioritaires 🔴',s.urgent,s.urgent?'alert':'')}
+      ${kpi('Cette semaine',s.week,'')}${kpi('Avancement global',Math.round(s.pct)+'%','blue')}
+    </div>
+    <div class="grid-2">
+      <div class="card"><h3>Répartition par statut</h3>${donut(byStatus.map(d=>({v:d.v,c:d.c})))}
+        <div class="legend">${byStatus.filter(d=>d.v).map(d=>`<span><i style="background:${d.c}"></i>${esc(d.l)} (${d.v})</span>`).join('')}</div></div>
+      <div class="card"><h3>Répartition par priorité</h3>${hbars(byPrio)}</div>
+      <div class="card"><h3>Tâches terminées par semaine</h3>${lineChart(weeks)}</div>
+      <div class="card"><h3>Charge de travail par catégorie</h3>${byCat.length?hbars(byCat):'<div class="empty-state">Aucune tâche active</div>'}</div>
+    </div>
+    <div class="card"><h3>⚠️ À traiter en priorité</h3>
+      ${urgentList.length?taskTable(urgentList):'<div class="empty-state">Rien d\u2019urgent. Tout est sous contrôle ✔</div>'}</div>`;
+  bindRows('#view-dash');
+}
+
+function dueCell(t){
+  if(!t.due_date)return '—';
+  const d=daysTo(t.due_date);
+  if(isLate(t))return `<span class="late-txt">${fmtD(t.due_date)} · +${-d} j</span>`;
+  if(isSoon(t))return `<span class="soon-txt">${fmtD(t.due_date)} · J-${d}</span>`;
+  return fmtD(t.due_date);
+}
+function taskTable(list){
+  return `<div class="table-wrap"><table><thead><tr>
+    <th>ID</th><th>Tâche</th><th>Client / Dossier</th><th>Catégorie</th><th>Responsable</th><th>Priorité</th><th>Statut</th><th>Échéance</th><th style="min-width:120px">Avancement</th>
+  </tr></thead><tbody>
+  ${list.map(t=>`<tr data-id="${t.id}">
+    <td style="color:var(--faint);font-size:12px">${tnum(t)}</td>
+    <td><div class="t-title">${esc(t.title)}</div>${t.next_action?`<div class="t-sub">→ ${esc(t.next_action)}</div>`:''}</td>
+    <td>${esc(clientName(t.client_id))||'—'}</td><td>${esc(t.category)}</td><td>${esc(profName(t.assignee_id))||'—'}</td>
+    <td><span class="badge-p ${PRIO[t.priority].cls}"><span class="dot"></span>${PRIO[t.priority].lbl}</span></td>
+    <td><span class="badge-s ${STAT[t.status].cls}"><span class="dot"></span>${STAT[t.status].lbl}</span></td>
+    <td>${dueCell(t)}</td>
+    <td><div style="display:flex;align-items:center;gap:8px"><div class="pbar ${t.status==='done'?'done':''}" style="flex:1"><div style="width:${t.status==='done'?100:t.progress}%"></div></div><span style="font-size:12px;color:var(--muted)">${t.status==='done'?100:t.progress}%</span></div></td>
+  </tr>`).join('')}
+  </tbody></table></div>`;
+}
+function bindRows(scopeSel){$$(scopeSel+' tr[data-id]').forEach(r=>r.onclick=()=>openModal(r.dataset.id));}
+
+function renderPortfolio(){
+  /* Regroupement par responsable de dossier, puis cartes par client */
+  const respFilter=scope;
+  let clients=DB.clients.slice();
+  if(respFilter!=='all'){
+    const uid=respFilter==='me'?me.id:respFilter;
+    const nm=profName(uid).toUpperCase();
+    clients=clients.filter(c=>c.responsible_id===uid||(!c.responsible_id&&(c.responsible_name||'').toUpperCase()===nm));
+  }
+  const addBar=`<div class="filters no-print">
+    <button class="btn primary sm" id="addClientBtn">＋ Nouveau dossier</button>
+    <span class="section-note" style="margin:0">Portefeuille de : <b>${esc(scopeName())}</b> — ${clients.length} dossier(s). Type et responsable modifiables sur chaque carte.</span>
+  </div>`;
+  if(!clients.length){$('#view-portfolio').innerHTML=addBar+'<div class="empty-state"><div class="big">🗂</div>Aucun dossier dans ce portefeuille.<br>Importez votre fichier de bases ou créez un dossier.</div>';bindPortfolio();return;}
+  $('#view-portfolio').innerHTML=addBar+`<div class="pf-grid">${clients.map(c=>{
+    const ts=DB.tasks.filter(t=>t.client_id===c.id);
+    const active=ts.filter(t=>!['done','dropped'].includes(t.status));
+    const done=ts.filter(t=>t.status==='done').length;
+    const late=ts.filter(isLate).length,blocked=ts.filter(t=>t.status==='blocked').length;
+    const pct=ts.length?Math.round(ts.reduce((a,t)=>a+(t.status==='done'?100:t.progress),0)/ts.length):0;
+    return `<div class="card pf-card">
+      <div class="pf-head"><h3 style="margin:0">🏢 ${esc(c.name)}</h3>
+        <div style="display:flex;gap:6px">
+          <button class="btn sm pf-bases" data-id="${c.id}" title="Suivi des bases">▤</button>
+          <button class="btn sm primary pf-add" data-id="${c.id}">＋ Tâche</button>
+        </div></div>
+      <div class="pf-resp">
+        <select class="pf-type" data-id="${c.id}" style="border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:11.5px">
+          <option ${c.type==='MENSUEL'?'selected':''}>MENSUEL</option><option ${c.type==='ANNUEL'?'selected':''}>ANNUEL</option>
+        </select>
+        <select class="pf-resp-sel" data-id="${c.id}" style="border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:11.5px;max-width:170px">
+          <option value="">${esc(c.responsible_name||'— Responsable —')}</option>
+          ${DB.profiles.map(p=>`<option value="${p.id}" ${c.responsible_id===p.id?'selected':''}>${esc(p.full_name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="pf-stats">
+        <span>${active.length} active(s)</span><span style="color:var(--green)">${done} terminée(s)</span>
+        ${late?`<span class="late-txt">${late} en retard</span>`:''}
+        ${blocked?`<span style="color:var(--red)">${blocked} bloquée(s)</span>`:''}
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin:8px 0 12px">
+        <div class="pbar" style="flex:1"><div style="width:${pct}%"></div></div>
+        <span style="font-size:12px;color:var(--muted)">${pct}%</span>
+      </div>
+      <div class="pf-list">${active.sort((a,b)=>(isLate(b)-isLate(a))||(PRIO[a.priority].rank-PRIO[b.priority].rank)).map(t=>`
+        <div class="pf-task" data-id="${t.id}">
+          <span class="badge-s ${STAT[t.status].cls}" style="font-size:11px"><span class="dot"></span>${STAT[t.status].lbl}</span>
+          <span class="pf-tt">${esc(t.title)}</span>
+          ${t.due_date?`<span class="${isLate(t)?'late-txt':isSoon(t)?'soon-txt':''}" style="font-size:11.5px;white-space:nowrap">📅 ${fmtDs(t.due_date)}</span>`:''}
+        </div>`).join('')||'<div style="color:var(--faint);font-size:12.5px;font-style:italic">Aucune tâche active ✔</div>'}
+      </div>
+    </div>`;}).join('')}</div>`;
+  bindPortfolio();
+}
+function bindPortfolio(){
+  $$('#view-portfolio .pf-task').forEach(el=>el.onclick=()=>openModal(el.dataset.id));
+  $$('#view-portfolio .pf-add').forEach(b=>b.onclick=()=>{openModal(null);$('#f_client').value=b.dataset.id;});
+  $$('#view-portfolio .pf-bases').forEach(b=>b.onclick=()=>{basesClient=b.dataset.id;setView('bases');});
+  $$('#view-portfolio .pf-type').forEach(s=>s.onchange=async()=>{
+    await sb.from('clients').update({type:s.value}).eq('id',s.dataset.id);
+    const c=DB.clients.find(c=>c.id===s.dataset.id);if(c)c.type=s.value;
+  });
+  $$('#view-portfolio .pf-resp-sel').forEach(s=>s.onchange=async()=>{
+    const val=s.value||null;
+    await sb.from('clients').update({responsible_id:val}).eq('id',s.dataset.id);
+    const c=DB.clients.find(c=>c.id===s.dataset.id);if(c)c.responsible_id=val;
+    render();
+  });
+  const add=$('#addClientBtn');
+  if(add)add.onclick=async()=>{
+    const name=prompt('Nom du nouveau dossier client :');if(!name)return;
+    const {data,error}=await sb.from('clients').insert({name:name.trim().toUpperCase(),responsible_id:me.id}).select().single();
+    if(error){alert('Ce dossier existe peut-être déjà.');return;}
+    DB.clients.push(data);DB.clients.sort((a,b)=>a.name.localeCompare(b.name,'fr'));render();
+  };
+}
+/* ================= TÂCHES / KANBAN ================= */
+function renderTasks(){
+  let list=scoped().filter(t=>{
+    if(filters.q){const q=filters.q.toLowerCase();
+      if(![t.title,t.description,clientName(t.client_id),profName(t.assignee_id),t.comments,tnum(t)].join(' ').toLowerCase().includes(q))return false;}
+    if(filters.client&&t.client_id!==filters.client)return false;
+    if(filters.category&&t.category!==filters.category)return false;
+    if(filters.assignee&&t.assignee_id!==filters.assignee)return false;
+    if(filters.priority&&t.priority!==filters.priority)return false;
+    if(filters.status&&t.status!==filters.status)return false;
+    if(filters.due&&(!t.due_date||t.due_date>filters.due))return false;
+    return true;
+  }).sort((a,b)=>(isLate(b)-isLate(a))||(PRIO[a.priority].rank-PRIO[b.priority].rank)||((a.due_date||'9999')<(b.due_date||'9999')?-1:1));
+  const sel=(id,opts,ph)=>`<select data-f="${id}"><option value="">${ph}</option>${opts.map(o=>`<option value="${esc(o.v??o)}" ${(filters[id]===(o.v??o))?'selected':''}>${esc(o.l??o)}</option>`).join('')}</select>`;
+  $('#view-tasks').innerHTML=`
+    <div class="filters">
+      <div class="search"><input data-f="q" placeholder="Recherche rapide (intitulé, client, notes…)" value="${esc(filters.q)}"></div>
+      ${sel('client',DB.clients.map(c=>({v:c.id,l:c.name})),'Client / Dossier')}
+      ${sel('category',CATS,'Catégorie')}
+      ${sel('assignee',DB.profiles.map(p=>({v:p.id,l:p.full_name})),'Responsable')}
+      ${sel('priority',Object.keys(PRIO).map(k=>({v:k,l:PRIO[k].ic+' '+PRIO[k].lbl})),'Priorité')}
+      ${sel('status',Object.keys(STAT).map(k=>({v:k,l:STAT[k].lbl})),'Statut')}
+      <input type="date" data-f="due" value="${filters.due}" title="Échéance avant le…">
+      <button class="btn sm" id="clearFilters">Réinitialiser</button>
+    </div>
+    ${list.length?taskTable(list):'<div class="empty-state"><div class="big">🗂</div>Aucune tâche ne correspond.</div>'}
+    <div class="section-note">${list.length} tâche(s) affichée(s) — périmètre : ${esc(scopeName())}. Cliquez sur une ligne pour ouvrir la fiche.</div>`;
+  $$('#view-tasks [data-f]').forEach(el=>{
+    el.oninput=()=>{filters[el.dataset.f]=el.value;renderTasks();
+      if(el.dataset.f==='q'){const i=$('#view-tasks .search input');i.focus();i.setSelectionRange(i.value.length,i.value.length);}};
+  });
+  $('#clearFilters').onclick=()=>{filters={q:'',client:'',category:'',assignee:'',priority:'',status:'',due:''};renderTasks();};
+  bindRows('#view-tasks');
+}
+
+function renderKanban(){
+  const T=scoped();
+  $('#view-kanban').innerHTML=`<div class="section-note">Périmètre : <b>${esc(scopeName())}</b></div>
+  <div class="kanban">${KANBAN_COLS.map(k=>`
+    <div class="kcol" data-col="${k}">
+      <div class="kcol-head"><span class="dot" style="color:${STAT[k].color};background:${STAT[k].color}"></span>${STAT[k].lbl}
+        <span class="cnt">${T.filter(t=>t.status===k).length}</span></div>
+      ${T.filter(t=>t.status===k).sort((a,b)=>PRIO[a.priority].rank-PRIO[b.priority].rank).map(t=>`
+        <div class="kcard" draggable="true" data-id="${t.id}">
+          <div class="kt">${esc(t.title)}</div>
+          <div class="km">${t.client_id?`<span>🏢 ${esc(clientName(t.client_id))}</span>`:''}<span class="badge-p ${PRIO[t.priority].cls}" style="font-size:11px">${PRIO[t.priority].lbl}</span></div>
+          <div class="km" style="margin-top:5px">${t.due_date?`<span class="${isLate(t)?'late-txt':isSoon(t)?'soon-txt':''}">📅 ${fmtD(t.due_date)}</span>`:''}${t.assignee_id?`<span>👤 ${esc(profName(t.assignee_id))}</span>`:''}</div>
+          <div class="kp"><div class="pbar ${t.status==='done'?'done':''}" style="flex:1"><div style="width:${t.status==='done'?100:t.progress}%"></div></div><span>${t.status==='done'?100:t.progress}%</span></div>
+        </div>`).join('')}
+    </div>`).join('')}</div>`;
+  $$('#view-kanban .kcard').forEach(c=>{
+    c.ondragstart=e=>e.dataTransfer.setData('text/plain',c.dataset.id);
+    c.onclick=()=>openModal(c.dataset.id);
+  });
+  $$('#view-kanban .kcol').forEach(col=>{
+    col.ondragover=e=>{e.preventDefault();col.classList.add('dragover');};
+    col.ondragleave=()=>col.classList.remove('dragover');
+    col.ondrop=async e=>{
+      e.preventDefault();col.classList.remove('dragover');
+      const id=e.dataTransfer.getData('text/plain');const t=DB.tasks.find(x=>x.id===id);
+      if(t&&t.status!==col.dataset.col){
+        const old=STAT[t.status].lbl;t.status=col.dataset.col;t.updated_at=new Date().toISOString();
+        const patch={status:t.status,updated_at:t.updated_at};
+        if(t.status==='done'){t.progress=100;t.completed_at=new Date().toISOString();patch.progress=100;patch.completed_at=t.completed_at;}
+        log(t.id,t.title,`Modification du statut : "${old}" → "${STAT[t.status].lbl}"`);
+        render();
+        const {error}=await sb.from('tasks').update(patch).eq('id',id);
+        setSync(!error);
+      }
+    };
+  });
+}
+
+/* ================= FICHE TÂCHE ================= */
+const FIELD_LBL={title:'Intitulé',description:'Description',client_id:'Client / Dossier',category:'Catégorie',assignee_id:'Responsable',
+  est_duration:'Durée estimée',start_date:'Date de début',due_date:'Date limite',priority:'Priorité',status:'Statut',
+  progress:'Avancement',last_action:'Dernière action',next_action:'Prochaine action',comments:'Commentaires',
+  block_cause:'Cause du blocage',block_action:'Action nécessaire',block_person:'Personne attendue'};
+function fillSelects(){
+  $('#f_client').innerHTML='<option value="">— Aucun —</option>'+DB.clients.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  $('#f_assignee').innerHTML='<option value="">— Non assigné —</option>'+DB.profiles.map(p=>`<option value="${p.id}">${esc(p.full_name)}</option>`).join('');
+}
+function openModal(id){
+  editingId=id||null;fillSelects();
+  const t=id?DB.tasks.find(x=>x.id===id):null;
+  $('#modalTitle').textContent=t?'Fiche tâche':'Nouvelle tâche';
+  $('#taskIdLbl').textContent=t?`${tnum(t)} · créée le ${fmtTS(t.created_at)}`:'';
+  $('#deleteTaskBtn').style.display=t?'inline-flex':'none';
+  $('#f_title').value=t?.title||'';$('#f_desc').value=t?.description||'';
+  $('#f_client').value=t?.client_id||'';$('#f_category').value=t?.category||'Client';
+  $('#f_assignee').value=t?t.assignee_id||'':me.id;
+  $('#f_duration').value=t?.est_duration||'';
+  $('#f_start').value=t?.start_date||'';$('#f_due').value=t?.due_date||'';
+  $('#f_priority').value=t?.priority||'p3';$('#f_status').value=t?.status||'todo';
+  $('#f_progress').value=t?.progress||0;$('#f_progressVal').textContent=$('#f_progress').value+'%';
+  $('#f_lastAction').value=t?.last_action||'';$('#f_nextAction').value=t?.next_action||'';
+  $('#f_comments').value=t?.comments||'';
+  $('#f_blockCause').value=t?.block_cause||'';$('#f_blockAction').value=t?.block_action||'';$('#f_blockPerson').value=t?.block_person||'';
+  toggleBlockFields();
+  $('#taskOverlay').classList.add('open');
+  setTimeout(()=>$('#f_title').focus(),50);
+}
+function toggleBlockFields(){$('#blockFields').classList.toggle('show',$('#f_status').value==='blocked');}
+$('#f_status').onchange=toggleBlockFields;
+$('#f_progress').oninput=()=>$('#f_progressVal').textContent=$('#f_progress').value+'%';
+$('#cancelTaskBtn').onclick=()=>$('#taskOverlay').classList.remove('open');
+$('#taskOverlay').onclick=e=>{if(e.target===$('#taskOverlay'))$('#taskOverlay').classList.remove('open');};
+
+$('#saveTaskBtn').onclick=async()=>{
+  const title=$('#f_title').value.trim();
+  if(!title){$('#f_title').focus();$('#f_title').style.borderColor='var(--red)';return;}
+  const vals={title,description:$('#f_desc').value.trim(),client_id:$('#f_client').value||null,category:$('#f_category').value,
+    assignee_id:$('#f_assignee').value||null,est_duration:$('#f_duration').value.trim(),
+    start_date:$('#f_start').value||null,due_date:$('#f_due').value||null,
+    priority:$('#f_priority').value,status:$('#f_status').value,progress:+$('#f_progress').value,
+    last_action:$('#f_lastAction').value.trim(),next_action:$('#f_nextAction').value.trim(),comments:$('#f_comments').value.trim(),
+    block_cause:$('#f_blockCause').value.trim(),block_action:$('#f_blockAction').value.trim(),block_person:$('#f_blockPerson').value.trim()};
+  if(vals.status==='done')vals.progress=100;
+  $('#saveTaskBtn').disabled=true;
+  if(editingId){
+    const t=DB.tasks.find(x=>x.id===editingId);
+    const changes=[];
+    for(const k of Object.keys(vals)){
+      if((t[k]??'')!==(vals[k]??'')&&!((t[k]==null||t[k]==='')&&(vals[k]==null||vals[k]===''))){
+        let o=t[k],n=vals[k];
+        if(k==='status'){o=STAT[o].lbl;n=STAT[n].lbl;}
+        if(k==='priority'){o=PRIO[o].lbl;n=PRIO[n].lbl;}
+        if(k==='progress'){o=o+'%';n=n+'%';}
+        if(k==='client_id'){o=clientName(o);n=clientName(n);}
+        if(k==='assignee_id'){o=profName(o);n=profName(n);}
+        changes.push(`${FIELD_LBL[k]||k} : "${o||'—'}" → "${n||'—'}"`);
+      }
+    }
+    if(vals.status==='done'&&t.status!=='done')vals.completed_at=new Date().toISOString();
+    if(vals.status!=='done'&&t.status==='done')vals.completed_at=null;
+    if(changes.length){
+      vals.updated_at=new Date().toISOString();
+      Object.assign(t,vals);
+      log(t.id,t.title,'Modification — '+changes.join(' · '));
+      const {error}=await sb.from('tasks').update(vals).eq('id',editingId);
+      setSync(!error);
+    }
+  }else{
+    vals.created_by=me.id;
+    if(vals.status==='done')vals.completed_at=new Date().toISOString();
+    const {data,error}=await sb.from('tasks').insert(vals).select().single();
+    if(!error&&data){DB.tasks.push(data);log(data.id,data.title,'Création de la tâche');}
+    setSync(!error);
+  }
+  $('#saveTaskBtn').disabled=false;
+  $('#taskOverlay').classList.remove('open');
+  render();
+};
+$('#deleteTaskBtn').onclick=async()=>{
+  const t=DB.tasks.find(x=>x.id===editingId);
+  if(t&&confirm(`Supprimer définitivement la tâche « ${t.title} » ?`)){
+    DB.tasks=DB.tasks.filter(x=>x.id!==editingId);
+    log(t.id,t.title,'Suppression de la tâche');
+    const {error}=await sb.from('tasks').delete().eq('id',editingId);
+    setSync(!error);
+    $('#taskOverlay').classList.remove('open');
+    render();
+  }
+};
+$('#newTaskBtn').onclick=()=>openModal(null);
+/* ================= SUIVI DES BASES ================= */
+function monthMark(jid,year,month){
+  const m=DB.months.find(x=>x.journal_id===jid&&x.year===year&&x.month===month);
+  return m?!!m.checked:false;
+}
+function countsFor(jid){return DB.counts.filter(c=>c.journal_id===jid);}
+function weekDates(clientJournals){
+  /* toutes les dates de relevé existantes pour ce client, triées */
+  const s=new Set();
+  clientJournals.forEach(j=>countsFor(j.id).forEach(c=>s.add(c.week_date)));
+  return [...s].sort();
+}
+function renderBases(){
+  if(!basesClient&&DB.clients.length)basesClient=DB.clients[0].id;
+  const c=DB.clients.find(x=>x.id===basesClient);
+  const cy=new Date().getFullYear();
+  const years=[...new Set([cy-1,cy,cy+1,basesYear])].sort();
+  const bar=`<div class="bases-bar no-print">
+    <select id="basesClientSel">${DB.clients.map(x=>`<option value="${x.id}" ${x.id===basesClient?'selected':''}>${esc(x.name)}</option>`).join('')}</select>
+    <select id="basesYearSel">${years.map(y=>`<option ${y===basesYear?'selected':''}>${y}</option>`).join('')}</select>
+    ${c?`<span class="badge-type ${c.type==='ANNUEL'?'annuel':''}">${esc(c.type||'MENSUEL')}</span>
+    <span class="section-note" style="margin:0">Responsable : <b>${esc(clientResp(c))||'—'}</b></span>`:''}
+    <span class="spacer" style="flex:1"></span>
+    <span class="section-note" style="margin:0">Cliquez sur une case mois pour cocher ✕ · saisissez le nombre de pièces du lundi</span>
+  </div>`;
+  if(!c){$('#view-bases').innerHTML=bar+'<div class="empty-state"><div class="big">▤</div>Créez d\u2019abord un dossier client (vue Portefeuille) ou importez votre fichier de bases.</div>';bindBasesBar();return;}
+
+  const tenue=DB.journals.filter(j=>j.client_id===c.id&&j.section==='tenue');
+  const decls=DB.journals.filter(j=>j.client_id===c.id&&j.section==='declaration');
+  const curMonday=iso(mondayOf(today()));
+  const allWeeks=weekDates(tenue);
+  const prevWeeks=allWeeks.filter(w=>w<curMonday).slice(-3);   /* 3 derniers relevés précédents */
+  const lastPrev=prevWeeks[prevWeeks.length-1]||null;
+
+  const monthHead=MONTHS_S.map(m=>`<th>${m}</th>`).join('');
+  const monthCells=j=>MONTHS_S.map((_,i)=>{
+    const on=monthMark(j.id,basesYear,i+1);
+    return `<td class="mcell ${on?'on':''}" data-j="${j.id}" data-m="${i+1}">${on?'✕':''}</td>`;
+  }).join('');
+
+  const tenueRows=tenue.map(j=>{
+    const cs=countsFor(j.id);
+    const cur=cs.find(x=>x.week_date===curMonday);
+    const prev=lastPrev?cs.find(x=>x.week_date===lastPrev):null;
+    const d=(cur&&prev)?cur.count-prev.count:(cur&&!prev&&cur.count>0?cur.count:null);
+    return `<tr>
+      <td class="lft code">${esc(j.code)}</td><td class="lft lib" title="${esc(j.label)}">${esc(j.label)}</td>
+      ${monthCells(j)}
+      ${prevWeeks.map(w=>{const pc=cs.find(x=>x.week_date===w);return `<td class="cnt-prev">${pc?pc.count:'·'}</td>`;}).join('')}
+      <td class="cnt-cur"><input type="number" min="0" data-j="${j.id}" value="${cur?cur.count:''}" placeholder="—"></td>
+      <td>${d===null?'':`<span class="delta ${d>0?'up':d<0?'dn':'zero'}">${d>0?'+':''}${d}</span>`}</td>
+      <td><button class="jdel" data-j="${j.id}" title="Supprimer ce code journal">✕</button></td>
+    </tr>`;
+  }).join('');
+  const tot=w=>tenue.reduce((a,j)=>{const x=countsFor(j.id).find(y=>y.week_date===w);return a+(x?x.count:0);},0);
+  const totCur=tot(curMonday),totPrev=lastPrev?tot(lastPrev):0;
+  const totDelta=lastPrev?totCur-totPrev:null;
+
+  const declRows=decls.map(j=>`<tr>
+      <td class="lft code" colspan="2">${esc(j.code)}</td>
+      ${monthCells(j)}
+      <td colspan="${prevWeeks.length+2}"></td>
+      <td><button class="jdel" data-j="${j.id}" title="Supprimer">✕</button></td>
+    </tr>`).join('');
+
+  $('#view-bases').innerHTML=bar+`
+    <div class="card" style="padding:0;overflow:hidden">
+      <h3 style="padding:16px 18px 0">Situation de la tenue — ${esc(c.name)} · ${basesYear}</h3>
+      <div class="bt-wrap" style="border:0;box-shadow:none;margin:0">
+      <table class="bt"><thead><tr>
+        <th class="lft">Code</th><th class="lft">Intitulé journal</th>${monthHead}
+        ${prevWeeks.map(w=>`<th title="Relevé précédent">${fmtDs(w)}</th>`).join('')}
+        <th style="color:var(--blue)">Lundi ${fmtDs(curMonday)}</th><th>Évol.</th><th></th>
+      </tr></thead><tbody>
+        ${tenueRows||`<tr><td colspan="${17+prevWeeks.length}" style="color:var(--faint);font-style:italic;padding:16px">Aucun code journal — ajoutez-en ci-dessous.</td></tr>`}
+        ${tenue.length?`<tr style="background:#f9fafc;font-weight:700"><td class="lft" colspan="2">TOTAL PIÈCES</td><td colspan="12"></td>
+          ${prevWeeks.map(w=>`<td class="cnt-prev">${tot(w)}</td>`).join('')}
+          <td>${totCur||''}</td><td>${totDelta===null?'':`<span class="delta ${totDelta>0?'up':totDelta<0?'dn':'zero'}">${totDelta>0?'+':''}${totDelta}</span>`}</td><td></td></tr>`:''}
+      </tbody></table></div>
+      <div class="addrow no-print">
+        <b style="font-size:12.5px">＋ Code journal :</b>
+        <input id="njCode" placeholder="Code (ex : ACH)" style="width:110px">
+        <input id="njLabel" placeholder="Intitulé (ex : ACHAT)" style="width:220px">
+        <button class="btn sm primary" id="njAdd">Ajouter</button>
+      </div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <h3 style="padding:16px 18px 0">Situation des déclarations — ${esc(c.name)} · ${basesYear}</h3>
+      <div class="bt-wrap" style="border:0;box-shadow:none;margin:0">
+      <table class="bt"><thead><tr>
+        <th class="lft" colspan="2">Déclaration</th>${monthHead}<th colspan="${prevWeeks.length+2}"></th><th></th>
+      </tr></thead><tbody>
+        ${declRows||`<tr><td colspan="${17+prevWeeks.length}" style="color:var(--faint);font-style:italic;padding:16px">Aucune déclaration suivie — ajoutez-en ci-dessous.</td></tr>`}
+      </tbody></table></div>
+      <div class="addrow no-print">
+        <b style="font-size:12.5px">＋ Déclaration :</b>
+        <input id="ndCode" placeholder="Ex : TVA, CFE, BRS, IPRES/CSS" style="width:220px">
+        <button class="btn sm primary" id="ndAdd">Ajouter</button>
+      </div>
+    </div>`;
+  bindBasesBar();bindBasesGrid(c);
+}
+function bindBasesBar(){
+  const cs=$('#basesClientSel');if(cs)cs.onchange=()=>{basesClient=cs.value;renderBases();};
+  const ys=$('#basesYearSel');if(ys)ys.onchange=()=>{basesYear=+ys.value;renderBases();};
+}
+function bindBasesGrid(c){
+  /* Croix mensuelles */
+  $$('#view-bases .mcell').forEach(td=>td.onclick=async()=>{
+    const jid=td.dataset.j,m=+td.dataset.m;
+    const cur=monthMark(jid,basesYear,m);
+    const row={journal_id:jid,year:basesYear,month:m,checked:!cur};
+    const ex=DB.months.find(x=>x.journal_id===jid&&x.year===basesYear&&x.month===m);
+    if(ex)ex.checked=!cur;else DB.months.push(row);
+    td.classList.toggle('on',!cur);td.textContent=!cur?'✕':'';
+    const {error}=await sb.from('journal_months').upsert(row);
+    setSync(!error);
+  });
+  /* Saisie des pièces du lundi */
+  $$('#view-bases .cnt-cur input').forEach(inp=>inp.onchange=async()=>{
+    const jid=inp.dataset.j,wk=iso(mondayOf(today()));
+    const val=inp.value===''?null:Math.max(0,parseInt(inp.value)||0);
+    if(val===null){
+      DB.counts=DB.counts.filter(x=>!(x.journal_id===jid&&x.week_date===wk));
+      const {error}=await sb.from('piece_counts').delete().eq('journal_id',jid).eq('week_date',wk);
+      setSync(!error);
+    }else{
+      const row={journal_id:jid,week_date:wk,count:val,entered_by:me.id};
+      const ex=DB.counts.find(x=>x.journal_id===jid&&x.week_date===wk);
+      if(ex)ex.count=val;else DB.counts.push(row);
+      const {error}=await sb.from('piece_counts').upsert(row);
+      setSync(!error);
+    }
+    renderBases();
+  });
+  /* Suppression code journal */
+  $$('#view-bases .jdel').forEach(b=>b.onclick=async()=>{
+    const j=DB.journals.find(x=>x.id===b.dataset.j);
+    if(j&&confirm(`Supprimer « ${j.code} » et tout son historique (croix + pièces) ?`)){
+      DB.journals=DB.journals.filter(x=>x.id!==j.id);
+      DB.months=DB.months.filter(x=>x.journal_id!==j.id);
+      DB.counts=DB.counts.filter(x=>x.journal_id!==j.id);
+      const {error}=await sb.from('journals').delete().eq('id',j.id);
+      setSync(!error);renderBases();
+    }
+  });
+  /* Ajouts */
+  const addJ=async(section,code,label)=>{
+    if(!code)return;
+    const pos=DB.journals.filter(j=>j.client_id===c.id&&j.section===section).length;
+    const {data,error}=await sb.from('journals').insert({client_id:c.id,section,code,label,position:pos}).select().single();
+    if(!error&&data)DB.journals.push(data);
+    setSync(!error);renderBases();
+  };
+  $('#njAdd').onclick=()=>addJ('tenue',$('#njCode').value.trim().toUpperCase(),$('#njLabel').value.trim().toUpperCase());
+  $('#ndAdd').onclick=()=>addJ('declaration',$('#ndCode').value.trim().toUpperCase(),'');
+}
+/* ================= RÉUNION DU LUNDI ================= */
+function renderMeeting(){
+  const s=stats();const T=scoped();
+  const since=Date.now()-7*864e5;
+  const doneW=T.filter(t=>t.status==='done'&&t.completed_at&&Date.parse(t.completed_at)>=since);
+  const doing=T.filter(t=>['doing','waiting'].includes(t.status));
+  const blocked=T.filter(t=>t.status==='blocked');
+  const top5=T.filter(t=>!['done','dropped'].includes(t.status))
+    .sort((a,b)=>(isLate(b)-isLate(a))||(PRIO[a.priority].rank-PRIO[b.priority].rank)||((a.due_date||'9999')<(b.due_date||'9999')?-1:1)).slice(0,5);
+  const now=new Date();
+  /* Synthèse bases : périmètre = dossiers du/des responsable(s) affiché(s) */
+  const curMonday=iso(mondayOf(today()));
+  let baseClients=DB.clients;
+  if(scope!=='all'){const uid=scope==='me'?me.id:scope;const nm=profName(uid).toUpperCase();
+    baseClients=DB.clients.filter(c=>c.responsible_id===uid||(!c.responsible_id&&(c.responsible_name||'').toUpperCase()===nm));}
+  const basesRows=baseClients.map(c=>{
+    const js=DB.journals.filter(j=>j.client_id===c.id&&j.section==='tenue');
+    if(!js.length)return null;
+    const wks=weekDates(js);const prev=wks.filter(w=>w<curMonday).pop()||null;
+    const sum=w=>js.reduce((a,j)=>{const x=countsFor(j.id).find(y=>y.week_date===w);return a+(x?x.count:0);},0);
+    const cur=sum(curMonday),pv=prev?sum(prev):0;
+    if(!cur&&!pv)return null;
+    return{name:c.name,prev:prev?pv:null,prevD:prev,cur,delta:prev?cur-pv:null};
+  }).filter(Boolean);
+  $('#view-meeting').innerHTML=`
+    <div class="ai-box">
+      <h3>✨ Assistant réunion (IA)</h3>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:12px">L'IA analyse les tâches du périmètre affiché et prépare : résumé de la semaine, points clés, retards critiques et suggestions d'organisation.</div>
+      <button class="btn primary no-print" id="aiBtn">Générer la synthèse IA</button>
+      <div class="ai-out" id="aiOut"></div>
+    </div>
+    <div class="report" id="reportZone">
+      <div class="report-head">
+        <div class="rlogo">◔ Pilotage Cabinet<small>Rapport de suivi hebdomadaire — ${esc(scopeName())}</small></div>
+        <div class="rdate">Réunion du lundi<b>${now.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</b>Préparé par ${esc(me.full_name)}</div>
+      </div>
+      <div class="rsynth">
+        <div><b>${doneW.length}</b><span>terminées cette semaine</span></div>
+        <div><b>${doing.length}</b><span>en cours</span></div>
+        <div><b style="color:${blocked.length?'var(--red)':'inherit'}">${blocked.length}</b><span>blocages</span></div>
+        <div><b>${Math.round(s.pct)}%</b><span>avancement global</span></div>
+      </div>
+      <div class="rsec"><h3>1 · Tâches terminées depuis la dernière réunion</h3>
+        ${doneW.length?`<table><thead><tr><th>Tâche</th><th>Client</th><th>Responsable</th><th>Réalisée le</th><th>Résultat obtenu</th></tr></thead><tbody>
+          ${doneW.map(t=>`<tr data-id="${t.id}"><td><b>${esc(t.title)}</b></td><td>${esc(clientName(t.client_id))||'—'}</td><td>${esc(profName(t.assignee_id))||'—'}</td><td>${fmtTS(t.completed_at).split(' ')[0]}</td><td>${esc(t.last_action||t.comments)||'—'}</td></tr>`).join('')}
+        </tbody></table>`:'<div class="empty">Aucune tâche terminée sur les 7 derniers jours.</div>'}
+      </div>
+      <div class="rsec"><h3>2 · Tâches en cours</h3>
+        ${doing.length?`<table><thead><tr><th>Tâche</th><th>Avancement</th><th>Difficultés</th><th>Prochaine étape</th><th>Échéance</th></tr></thead><tbody>
+          ${doing.map(t=>`<tr data-id="${t.id}"><td><b>${esc(t.title)}</b><div class="t-sub">${esc(clientName(t.client_id))} · ${esc(profName(t.assignee_id))}</div></td>
+            <td><div style="display:flex;align-items:center;gap:6px"><div class="pbar" style="width:60px"><div style="width:${t.progress}%"></div></div>${t.progress}%</div></td>
+            <td>${esc(t.comments)||'—'}</td><td>${esc(t.next_action)||'—'}</td><td>${dueCell(t)}</td></tr>`).join('')}
+        </tbody></table>`:'<div class="empty">Aucune tâche en cours.</div>'}
+      </div>
+      <div class="rsec"><h3>3 · Blocages</h3>
+        ${blocked.length?`<table><thead><tr><th>Tâche</th><th>Cause du blocage</th><th>Action nécessaire</th><th>Personne attendue</th></tr></thead><tbody>
+          ${blocked.map(t=>`<tr data-id="${t.id}"><td><b>${esc(t.title)}</b><div class="t-sub">${esc(clientName(t.client_id))}</div></td><td>${esc(t.block_cause)||'—'}</td><td>${esc(t.block_action)||'—'}</td><td>${esc(t.block_person)||'—'}</td></tr>`).join('')}
+        </tbody></table>`:'<div class="empty">Aucun blocage. ✔</div>'}
+      </div>
+      <div class="rsec"><h3>4 · Priorités de la semaine (Top 5)</h3>
+        ${top5.length?`<table><thead><tr><th>#</th><th>Tâche</th><th>Priorité</th><th>Échéance</th><th>Prochaine action</th></tr></thead><tbody>
+          ${top5.map((t,i)=>`<tr data-id="${t.id}"><td><b>${i+1}</b></td><td><b>${esc(t.title)}</b><div class="t-sub">${esc(clientName(t.client_id))}</div></td>
+            <td><span class="badge-p ${PRIO[t.priority].cls}">${PRIO[t.priority].lbl}</span></td><td>${dueCell(t)}</td><td>${esc(t.next_action)||'—'}</td></tr>`).join('')}
+        </tbody></table>`:'<div class="empty">Aucune tâche active.</div>'}
+      </div>
+      <div class="rsec"><h3>5 · Tenue des bases — pièces saisies</h3>
+        ${basesRows.length?`<table><thead><tr><th>Dossier</th><th>Relevé précédent</th><th>Lundi ${fmtDs(curMonday)}</th><th>Pièces saisies</th></tr></thead><tbody>
+          ${basesRows.map(r=>`<tr><td><b>${esc(r.name)}</b></td><td>${r.prev===null?'—':r.prev+' ('+fmtDs(r.prevD)+')'}</td><td>${r.cur||'—'}</td>
+            <td>${r.delta===null?'—':`<span class="delta ${r.delta>0?'up':r.delta<0?'dn':'zero'}">${r.delta>0?'+':''}${r.delta}</span>`}</td></tr>`).join('')}
+        </tbody></table>`:'<div class="empty">Aucun relevé de pièces pour ce périmètre. Renseignez-les dans « Suivi des bases ».</div>'}
+      </div>
+    </div>`;
+  bindRows('#view-meeting');
+  $('#aiBtn').onclick=runAI;
+}
+
+/* ================= ALERTES / HISTORIQUE / ADMIN ================= */
+function renderAlerts(){
+  const al=alertsList();
+  $('#view-alerts').innerHTML=`<div class="section-note">Périmètre : <b>${esc(scopeName())}</b></div>`+(al.length?al.map(a=>`
+    <div class="alert-item ${a.type}" data-id="${a.t.id}">
+      <div style="font-size:19px">${a.ic}</div>
+      <div><div class="ai-t">${a.title} — ${esc(a.t.title)}</div>
+      <div class="ai-d">${a.desc} · ${esc(clientName(a.t.client_id))||'Sans client'} · <span class="badge-p ${PRIO[a.t.priority].cls}" style="font-size:11px">${PRIO[a.t.priority].lbl}</span></div></div>
+    </div>`).join('')
+  :'<div class="empty-state"><div class="big">✅</div>Aucune alerte. Toutes les tâches sont à jour.</div>');
+  $$('#view-alerts .alert-item').forEach(el=>el.onclick=()=>openModal(el.dataset.id));
+}
+function renderHistory(){
+  $('#view-history').innerHTML=`<div class="card">${
+    DB.history.length?DB.history.map(h=>`
+      <div class="hist-item"><div class="hist-ts">${fmtTS(h.ts)}</div>
+      <div class="hist-body"><b>${esc(h.task_title)}</b><br>
+      ${esc(h.change)}<br><span class="hist-user">Utilisateur : ${esc(h.user_name)}</span></div></div>`).join('')
+    :'<div class="empty-state">Aucune modification enregistrée pour le moment.</div>'}</div>`;
+}
+function renderAdmin(){
+  if(me.role!=='admin'){$('#view-admin').innerHTML='<div class="empty-state">Accès réservé à l\u2019administrateur.</div>';return;}
+  $('#view-admin').innerHTML=`
+    <div class="card"><h3>👥 Collaborateurs du cabinet</h3>
+      <div class="table-wrap" style="border:0;box-shadow:none"><table style="min-width:0"><thead>
+        <tr><th>Nom complet</th><th>Utilisateur</th><th>Rôle</th><th>Dossiers</th><th></th></tr></thead><tbody>
+        ${DB.profiles.map(p=>`<tr>
+          <td><b>${esc(p.full_name)}</b>${p.id===me.id?' <span style="color:var(--faint);font-size:11px">(vous)</span>':''}</td>
+          <td style="color:var(--muted)">${esc(p.username)}</td>
+          <td><span class="badge-role ${p.role==='admin'?'admin':''}">${p.role==='admin'?'Admin':'Collaborateur'}</span></td>
+          <td>${DB.clients.filter(c=>c.responsible_id===p.id).length}</td>
+          <td>${p.id!==me.id?`<button class="btn sm roleBtn" data-id="${p.id}" data-role="${p.role==='admin'?'collab':'admin'}">${p.role==='admin'?'Rétrograder':'Promouvoir admin'}</button>`:''}</td>
+        </tr>`).join('')}
+      </tbody></table></div>
+      <div class="section-note" style="margin-top:10px">Pour réinitialiser un mot de passe : Supabase → Authentication → Users → ⋯ → Reset password.</div>
+    </div>
+    <div class="card"><h3>＋ Créer un compte collaborateur</h3>
+      <div class="fgrid" style="max-width:640px">
+        <div class="fld"><label>Nom complet</label><input id="nuName" placeholder="Coumba Cissé"></div>
+        <div class="fld"><label>Nom d'utilisateur (connexion)</label><input id="nuUser" placeholder="ccisse"></div>
+        <div class="fld"><label>Mot de passe (8 caractères min.)</label><input id="nuPass" type="text" placeholder="À communiquer au collaborateur"></div>
+        <div class="fld"><label>Rôle</label><select id="nuRole"><option value="collab">Collaborateur</option><option value="admin">Administrateur</option></select></div>
+      </div>
+      <div class="auth-err" id="nuErr" style="display:none"></div>
+      <button class="btn primary" id="nuBtn" style="margin-top:12px">Créer le compte</button>
+    </div>`;
+  $$('#view-admin .roleBtn').forEach(b=>b.onclick=async()=>{
+    const {error}=await sb.from('profiles').update({role:b.dataset.role}).eq('id',b.dataset.id);
+    if(!error){const p=DB.profiles.find(p=>p.id===b.dataset.id);p.role=b.dataset.role;render();}
+  });
+  $('#nuBtn').onclick=createUser;
+}
+async function createUser(){
+  const name=$('#nuName').value.trim(),u=$('#nuUser').value.trim().toLowerCase().replace(/[^a-z0-9._-]/g,''),
+        p=$('#nuPass').value,role=$('#nuRole').value;
+  const err=$('#nuErr');err.style.display='none';
+  if(!name||!u||p.length<8){err.textContent='Complétez tous les champs (mot de passe : 8 caractères min.).';err.style.display='block';return;}
+  $('#nuBtn').disabled=true;$('#nuBtn').textContent='Création…';
+  /* Client secondaire : la création du compte ne déconnecte pas l'admin */
+  const cfg=getCfg();
+  const sb2=supabase.createClient(cfg.url,cfg.key,{auth:{persistSession:false,autoRefreshToken:false}});
+  const {data,error}=await sb2.auth.signUp({email:u+'@cabinet.local',password:p,options:{data:{username:u,full_name:name}}});
+  if(error){err.textContent='Création impossible : '+error.message;err.style.display='block';}
+  else{
+    if(role==='admin'&&data.user){await sb.from('profiles').update({role:'admin'}).eq('id',data.user.id);}
+    await sb2.auth.signOut();
+    await loadAll();
+    /* rattacher les dossiers importés portant ce nom */
+    const nm=name.toUpperCase();
+    const orphans=DB.clients.filter(c=>!c.responsible_id&&(c.responsible_name||'').toUpperCase()===nm);
+    for(const c of orphans){await sb.from('clients').update({responsible_id:data.user.id}).eq('id',c.id);c.responsible_id=data.user.id;}
+    alert(`Compte créé.\nUtilisateur : ${u}\nMot de passe : ${p}\n\nCommuniquez ces identifiants au collaborateur.`+(orphans.length?`\n\n${orphans.length} dossier(s) « ${name} » lui ont été rattachés automatiquement.`:''));
+    render();
+  }
+  $('#nuBtn').disabled=false;$('#nuBtn').textContent='Créer le compte';
+}
+/* ================= IMPORTS EXCEL ================= */
+$('#importXlsBtn').onclick=()=>$('#importFile').click();
+$('#importFile').onchange=async e=>{
+  const file=e.target.files[0];if(!file)return;
+  try{
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array',cellDates:true});
+    /* Détection automatique du format */
+    const isBases=wb.SheetNames.some(n=>n.toUpperCase().includes('BASE DE DONNEES'))||
+      wb.SheetNames.some(n=>{
+        const rows=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:'',raw:true});
+        return rows.some(r=>String(r[0]).toLowerCase().startsWith('code journal'));
+      });
+    if(isBases)await importBases(wb,file.name);
+    else await importTasks(wb,file.name);
+  }catch(err){console.error(err);alert("Le fichier n'a pas pu être lu.\nFormats acceptés :\n• Tâches : colonne A = entreprise, colonne B = tâche\n• Bases : classeur avec feuille « BASE DE DONNEES » et une feuille par client.");}
+  e.target.value='';
+};
+
+async function ensureClient(name,extra={}){
+  name=name.trim().toUpperCase();
+  let c=DB.clients.find(x=>x.name.toUpperCase()===name);
+  if(c){
+    if(Object.keys(extra).length){
+      const patch={};
+      if(extra.type&&!c.type)patch.type=extra.type;
+      if(extra.responsible_name&&!c.responsible_id&&!c.responsible_name)patch.responsible_name=extra.responsible_name;
+      if(extra.responsible_id&&!c.responsible_id)patch.responsible_id=extra.responsible_id;
+      if(Object.keys(patch).length){await sb.from('clients').update(patch).eq('id',c.id);Object.assign(c,patch);}
+    }
+    return c;
+  }
+  const {data,error}=await sb.from('clients').insert({name,...extra}).select().single();
+  if(error)throw error;
+  DB.clients.push(data);
+  return data;
+}
+
+async function importTasks(wb,fname){
+  const ws=wb.Sheets[wb.SheetNames[0]];
+  const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+  let clientRow='',added=0,skipped=0,start=0;
+  const h=(rows[0]||[]).join(' ').toLowerCase();
+  if(h.includes('tache')||h.includes('tâche')||h.includes('entreprise')||h.includes('client'))start=1;
+  const existing=new Set(DB.tasks.map(t=>((clientName(t.client_id)||'')+'|'+t.title).toLowerCase().trim()));
+  const inserts=[];
+  for(let i=start;i<rows.length;i++){
+    const a=(rows[i][0]??'').toString().trim();
+    const b=(rows[i][1]??'').toString().trim();
+    if(a)clientRow=a;                    /* remplissage : lignes suivantes = même client */
+    if(!b)continue;
+    const key=(clientRow.toUpperCase()+'|'+b).toLowerCase();
+    if(existing.has(key)){skipped++;continue;}
+    existing.add(key);
+    const c=clientRow?await ensureClient(clientRow):null;
+    inserts.push({title:b,client_id:c?c.id:null,category:'Client',assignee_id:me.id,created_by:me.id,
+      priority:'p3',status:'todo',progress:0});
+    added++;
+  }
+  if(inserts.length){
+    const {data,error}=await sb.from('tasks').insert(inserts).select();
+    if(error)throw error;
+    DB.tasks.push(...data);
+    log(null,'Import Excel',`Import de ${added} tâche(s) depuis « ${fname} »`);
+  }
+  render();
+  alert(`Import de tâches terminé : ${added} ajoutée(s)${skipped?`, ${skipped} doublon(s) ignoré(s)`:''}.`);
+}
+
+async function importBases(wb,fname){
+  let nClients=0,nJournals=0,nMarks=0,nCounts=0;
+  const year=new Date().getFullYear();
+  /* 1) Feuille BASE DE DONNEES : dossiers + type + responsable */
+  const bdName=wb.SheetNames.find(n=>n.toUpperCase().includes('BASE DE DONNEES'));
+  if(bdName){
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[bdName],{header:1,defval:''});
+    for(let i=1;i<rows.length;i++){
+      const name=(rows[i][0]??'').toString().trim();
+      if(!name)continue;
+      const type=(rows[i][1]??'').toString().trim().toUpperCase()||'MENSUEL';
+      const resp=(rows[i][2]??'').toString().trim();
+      const prof=DB.profiles.find(p=>p.full_name.toUpperCase()===resp.toUpperCase());
+      const before=DB.clients.length;
+      await ensureClient(name,{type,responsible_name:resp,...(prof?{responsible_id:prof.id}:{})});
+      if(DB.clients.length>before)nClients++;
+    }
+  }
+  /* 2) Une feuille par client : tenue + déclarations */
+  const monthIdx=h=>{const s=String(h).toLowerCase().slice(0,4);
+    return MONTHS.findIndex(m=>m.toLowerCase().startsWith(s.slice(0,3)))};
+  for(const sn of wb.SheetNames){
+    if(sn===bdName)continue;
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:'',raw:true});
+    const hIdx=rows.findIndex(r=>String(r[0]).toLowerCase().startsWith('code journal'));
+    if(hIdx<0)continue;
+    const client=await ensureClient(sn);
+    const header=rows[hIdx];
+    /* colonnes mois et colonnes datées (relevés hebdo) */
+    const monthCols={},dateCols=[];
+    header.forEach((h,ci)=>{
+      if(ci<2)return;
+      if(h instanceof Date){dateCols.push({ci,date:iso(h)});return;}
+      const mi=MONTHS.findIndex(m=>m.toLowerCase()===String(h).toLowerCase().trim());
+      if(mi>=0)monthCols[ci]=mi+1;
+      else{const d=new Date(h);if(h&&!isNaN(d)&&String(h).match(/\d{4}/))dateCols.push({ci,date:iso(d)});}
+    });
+    const jRows=[],mRows=[],cRows=[];
+    const parseSection=(startI,section)=>{
+      let pos=DB.journals.filter(j=>j.client_id===client.id&&j.section===section).length;
+      for(let i=startI;i<rows.length;i++){
+        const code=(rows[i][0]??'').toString().trim();
+        const up=code.toUpperCase();
+        if(up.startsWith('SITUATION DES DECL'))return i;   /* fin de la tenue */
+        if(!code){if(section==='declaration')break;continue;}
+        if(up.startsWith('SITUATION')||up.startsWith('INTITULÉ')||up.startsWith('INTITULE')||up.startsWith('TOTAL'))continue;
+        if(/^\d+$/.test(code))continue;                    /* ligne de total */
+        const label=section==='tenue'?(rows[i][1]??'').toString().trim():'';
+        if(DB.journals.some(j=>j.client_id===client.id&&j.section===section&&j.code.toUpperCase()===up))continue;
+        jRows.push({client_id:client.id,section,code:code.toUpperCase(),label:label.toUpperCase(),position:pos++,
+          _months:Object.entries(monthCols).filter(([ci])=>String(rows[i][ci]).trim().toUpperCase()==='X').map(([,m])=>m),
+          _counts:section==='tenue'?dateCols.map(dc=>({date:dc.date,v:parseInt(rows[i][dc.ci])})).filter(x=>!isNaN(x.v)):[]});
+      }
+      return rows.length;
+    };
+    const declStart=parseSection(hIdx+1,'tenue');
+    /* section déclarations : chercher l'en-tête "Intitulé journal" après */
+    let dh=-1;
+    for(let i=declStart;i<rows.length;i++){
+      if(String(rows[i][0]).toLowerCase().startsWith('intitulé journal')||String(rows[i][0]).toLowerCase().startsWith('intitule journal')){dh=i;break;}
+    }
+    if(dh>=0)parseSection(dh+1,'declaration');
+    /* insertion en base */
+    for(const j of jRows){
+      const {_months,_counts,...row}=j;
+      const {data,error}=await sb.from('journals').insert(row).select().single();
+      if(error)continue;
+      DB.journals.push(data);nJournals++;
+      for(const m of _months){mRows.push({journal_id:data.id,year,month:m,checked:true});}
+      for(const c of _counts){cRows.push({journal_id:data.id,week_date:c.date,count:c.v,entered_by:me.id});}
+    }
+    if(mRows.length){const {error}=await sb.from('journal_months').upsert(mRows);if(!error){DB.months.push(...mRows);nMarks+=mRows.length;}mRows.length=0;}
+    if(cRows.length){const {error}=await sb.from('piece_counts').upsert(cRows);if(!error){DB.counts.push(...cRows);nCounts+=cRows.length;}cRows.length=0;}
+  }
+  log(null,'Import fichier de bases',`« ${fname} » : ${nClients} dossier(s), ${nJournals} journal(aux), ${nMarks} croix, ${nCounts} relevé(s)`);
+  render();
+  alert(`Import du fichier de bases terminé :\n• ${nClients} nouveau(x) dossier(s)\n• ${nJournals} code(s) journal / déclaration(s)\n• ${nMarks} croix mensuelles (année ${year})\n• ${nCounts} relevé(s) de pièces\n\nLes responsables sont rattachés automatiquement quand leur compte existe (sinon dès sa création).`);
+}
+
+/* ================= EXPORT / IMPRESSION ================= */
+$('#exportXlsBtn').onclick=()=>{
+  const rows=DB.tasks.map(t=>({
+    'ID':tnum(t),'Intitulé':t.title,'Description':t.description,'Client / Dossier':clientName(t.client_id),'Catégorie':t.category,
+    'Responsable':profName(t.assignee_id),'Priorité':PRIO[t.priority].lbl,'Statut':STAT[t.status].lbl,
+    'Avancement (%)':t.status==='done'?100:t.progress,'Créée le':fmtTS(t.created_at),
+    'Début prévu':t.start_date||'','Date limite':t.due_date||'','Durée estimée':t.est_duration,
+    'Dernière action':t.last_action,'Prochaine action':t.next_action,'Commentaires':t.comments,
+    'Cause blocage':t.block_cause,'Action nécessaire':t.block_action,'Personne attendue':t.block_person,
+    'Terminée le':t.completed_at?fmtTS(t.completed_at):''
+  }));
+  const ws=XLSX.utils.json_to_sheet(rows.length?rows:[{'ID':''}]);
+  ws['!cols']=Object.keys(rows[0]||{ID:1}).map(k=>({wch:Math.max(14,k.length+2)}));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Tâches');
+  XLSX.writeFile(wb,'suivi_des_taches_'+iso(new Date())+'.xlsx');
+};
+$('#printBtn').onclick=()=>{
+  if(currentView!=='meeting'){setView('meeting');setTimeout(()=>window.print(),300);}
+  else window.print();
+};
+
+/* ================= ASSISTANT IA ================= */
+async function runAI(){
+  const out=$('#aiOut');const btn=$('#aiBtn');
+  btn.disabled=true;btn.textContent='Analyse en cours…';
+  out.innerHTML='<p style="color:var(--muted)">⏳ L\u2019assistant analyse les tâches…</p>';
+  const data=scoped().map(t=>({titre:t.title,client:clientName(t.client_id),categorie:t.category,responsable:profName(t.assignee_id),
+    priorite:PRIO[t.priority].lbl,statut:STAT[t.status].lbl,avancement:(t.status==='done'?100:t.progress)+'%',
+    echeance:t.due_date||null,retard:isLate(t),prochaine_action:t.next_action,difficultes:t.comments,
+    blocage:t.status==='blocked'?{cause:t.block_cause,action:t.block_action,personne:t.block_person}:null}));
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,messages:[{role:'user',content:
+`Tu es l'assistant de préparation de la réunion hebdomadaire d'un cabinet comptable. Nous sommes le ${new Date().toLocaleDateString('fr-FR')}. Périmètre : ${scopeName()}. Voici les tâches au format JSON :
+
+${JSON.stringify(data)}
+
+Rédige en français une synthèse de réunion structurée avec exactement ces 4 sections, en Markdown simple (titres avec ##, listes avec -), sans préambule :
+## Résumé de la semaine
+## Points importants à présenter
+## Retards critiques
+## Suggestions d'organisation
+Sois concret, concis et professionnel.`}]})});
+    const d=await r.json();
+    const txt=(d.content||[]).map(c=>c.text||'').join('\n');
+    if(!txt)throw new Error('vide');
+    out.innerHTML=mdToHtml(txt);
+  }catch(e){
+    out.innerHTML='<p style="color:var(--red)">La synthèse IA n\u2019est disponible que dans l\u2019environnement Claude (aperçu). En version déployée, préparez la synthèse à partir du rapport ci-dessous.</p>';
+  }
+  btn.disabled=false;btn.textContent='Régénérer la synthèse IA';
+}
+function mdToHtml(md){
+  const lines=md.split('\n');let html='',inList=false;
+  for(let l of lines){
+    l=l.trim();if(!l){if(inList){html+='</ul>';inList=false;}continue;}
+    l=esc(l).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
+    if(l.startsWith('## ')){if(inList){html+='</ul>';inList=false;}html+=`<h4>${l.slice(3)}</h4>`;}
+    else if(l.startsWith('- ')||l.startsWith('* ')){if(!inList){html+='<ul>';inList=true;}html+=`<li>${l.slice(2)}</li>`;}
+    else{if(inList){html+='</ul>';inList=false;}html+=`<p>${l}</p>`;}
+  }
+  if(inList)html+='</ul>';
+  return html;
+}
+
+/* ================= PWA & DÉMARRAGE ================= */
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+}
+boot();
+</script>
+</body>
+</html>

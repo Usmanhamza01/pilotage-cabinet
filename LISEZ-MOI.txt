@@ -1,0 +1,77 @@
+PILOTAGE CABINET — GUIDE D'INSTALLATION
+=======================================
+
+Application multi-utilisateurs pour cabinet : suivi des tâches par
+collaborateur et par portefeuille client, réunion du lundi, et suivi
+des bases (tenue, déclarations, pièces hebdomadaires).
+Synchronisation temps réel entre tous les appareils via Supabase.
+
+CONTENU DU DOSSIER
+------------------
+  index.html            L'application (PWA)
+  manifest.webmanifest  Manifeste d'installation
+  sw.js                 Service worker (network-first, skipWaiting)
+  icon-192.png / icon-512.png
+  setup_supabase.sql    Script de création de la base (à exécuter 1 fois)
+
+ÉTAPE 1 — CRÉER LE PROJET SUPABASE (5 min, une seule fois)
+----------------------------------------------------------
+1. https://supabase.com > New project (région Europe conseillée).
+2. SQL Editor > New query > coller TOUT le contenu de
+   setup_supabase.sql > Run. Aucune erreur ne doit apparaître.
+3. Authentication > Sign In / Providers > Email :
+   DÉSACTIVER « Confirm email » (les comptes sont créés par l'admin,
+   les adresses utilisateur@cabinet.local sont internes).
+4. Settings > API : noter
+   - Project URL   (https://xxxx.supabase.co)
+   - anon public key
+
+ÉTAPE 2 — DÉPLOYER L'APPLICATION
+--------------------------------
+Déposer les 5 fichiers (hors .sql) sur n'importe quel hébergement
+statique : Netlify (glisser-déposer le dossier), Vercel, GitHub Pages,
+ou le même hébergement que le site Trezo. Aucun serveur à configurer.
+
+ÉTAPE 3 — PREMIER LANCEMENT
+---------------------------
+1. Ouvrir l'URL de l'application : l'écran de configuration demande
+   l'URL du projet et la clé anon (à faire une fois par appareil).
+2. Sur l'écran de connexion, cliquer « Créer le compte administrateur »
+   et créer votre compte : LE PREMIER COMPTE EST AUTOMATIQUEMENT ADMIN.
+3. Menu « Utilisateurs » : créer un compte par collaborateur
+   (nom complet, nom d'utilisateur, mot de passe à leur communiquer).
+   Si des dossiers importés portent leur nom exact (ex : COUMBA CISSE),
+   ils leur sont rattachés automatiquement à la création du compte.
+
+ÉTAPE 4 — IMPORTER VOS FICHIERS EXISTANTS (bouton « Importer »)
+---------------------------------------------------------------
+Le bouton détecte automatiquement le format :
+• FICHIER DE BASES (type Classeur2.xlsx) : feuille « BASE DE DONNEES »
+  (dossiers / type / responsable) + une feuille par client avec
+  « Situation de la tenue » (codes journaux, croix Janvier→Décembre,
+  colonnes datées = relevés de pièces) et « Situation des déclarations ».
+  Tout est importé : dossiers, journaux, croix (année en cours),
+  historiques de pièces.
+• FICHIER DE TÂCHES (colonne A = entreprise, colonne B = tâche, avec
+  regroupement quand la cellule entreprise est vide).
+Les doublons sont ignorés : vous pouvez réimporter sans risque.
+
+UTILISATION AU QUOTIDIEN
+------------------------
+• Sélecteur en haut à droite : « Mes tâches », « Tout le cabinet »,
+  ou un collaborateur précis (pratique pour animer la réunion).
+• Suivi des bases : clic sur une case mois = croix ✕ ; chaque lundi,
+  saisir le nombre de pièces par code journal — la colonne « Évol. »
+  compare automatiquement à la semaine précédente.
+• Réunion du lundi : rapport auto en 5 sections (terminées, en cours,
+  blocages, top 5 priorités, tenue des bases) ; « Rapport PDF » pour
+  l'imprimer.
+• Toute modification est tracée dans l'Historique avec le nom de
+  l'utilisateur connecté.
+
+NOTES
+-----
+• Réinitialiser un mot de passe : Supabase > Authentication > Users.
+• La synthèse IA fonctionne dans l'aperçu Claude ; en version déployée,
+  le rapport automatique reste complet sans elle.
+• Le pastille verte/rouge en haut indique l'état de synchronisation.

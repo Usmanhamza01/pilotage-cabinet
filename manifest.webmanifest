@@ -1,0 +1,14 @@
+{
+  "name": "Pilotage Cabinet — Suivi des tâches & des bases",
+  "short_name": "Pilotage",
+  "description": "Suivi des tâches, du portefeuille clients et de la tenue des bases pour cabinet comptable. Multi-utilisateurs, synchronisé via Supabase.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f4f6fa",
+  "theme_color": "#122f7e",
+  "lang": "fr",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
