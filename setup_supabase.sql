@@ -45,6 +45,10 @@ create table public.clients (
   type text default 'MENSUEL',                 -- MENSUEL / ANNUEL
   responsible_id uuid references public.profiles(id) on delete set null,
   responsible_name text default '',            -- nom importé si pas encore de compte
+  interlocutor text default '',                -- contact chez le client
+  address text default '',
+  phone text default '',
+  email text default '',
   created_at timestamptz default now()
 );
 

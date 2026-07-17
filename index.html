@@ -263,6 +263,10 @@ td .t-sub{font-size:12px;color:var(--faint)}
 .pf-resp{font-size:12px;color:var(--muted);margin-bottom:8px}
 .pf-stats{display:flex;flex-wrap:wrap;gap:12px;font-size:12.5px;color:var(--muted)}
 .pf-list{display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto}
+.pf-contact{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;font-size:12px;color:var(--muted);padding:8px 0 10px;margin-bottom:6px;border-bottom:1px dashed var(--line)}
+.pf-contact a{color:var(--blue);text-decoration:none}
+.pf-contact a:hover{text-decoration:underline}
+.pf-contact .btn{padding:2px 8px;font-size:11.5px}
 .pf-task{display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid #eef1f6;border-radius:8px;cursor:pointer;font-size:13px}
 .pf-task:hover{background:#f7f9fd;border-color:var(--blue-line)}
 .pf-task .pf-tt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -452,7 +456,27 @@ td .t-sub{font-size:12px;color:var(--faint)}
     </div>
   </div>
 </div>
+
+<!-- Modal fiche client -->
+<div class="overlay" id="clientOverlay">
+  <div class="modal" style="max-width:560px">
+    <h2 id="cm_title">Fiche dossier</h2>
+    <div class="fgrid">
+      <div class="fld full"><label>Nom du dossier</label><input id="cm_name" disabled style="background:#f4f6fa"></div>
+      <div class="fld full"><label>Interlocuteur</label><input id="cm_interlocutor" placeholder="Nom du contact chez le client"></div>
+      <div class="fld full"><label>Adresse</label><input id="cm_address"></div>
+      <div class="fld"><label>Téléphone</label><input id="cm_phone" placeholder="77 000 00 00"></div>
+      <div class="fld"><label>Mail</label><input id="cm_email" placeholder="contact@exemple.sn"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn danger" id="cm_delete" style="margin-right:auto">Supprimer le dossier</button>
+      <button class="btn" id="cm_cancel">Annuler</button>
+      <button class="btn primary" id="cm_save">Enregistrer</button>
+    </div>
+  </div>
+</div>
 <script>
+
 /* ================= CONFIGURATION SUPABASE ================= */
 const CFGKEY='pilotage:cfg';
 let memCfg=null;
@@ -555,10 +579,18 @@ function startRealtime(){
 }
 
 /* --- Écrans config / connexion --- */
+function cleanUrl(raw){
+  let u=(raw||'').trim();
+  const m=u.match(/https?:\/\/[a-z0-9-]+\.supabase\.co/i);   /* garde uniquement la base */
+  if(m)return m[0].replace(/^http:/,'https:');
+  return u.replace(/\/(rest|auth|storage|realtime|functions)(\/.*)?$/i,'').replace(/\/+$/,'');
+}
 $('#cfgSave').onclick=()=>{
-  const url=$('#cfgUrl').value.trim().replace(/\/+$/,''),key=$('#cfgKey').value.trim();
-  if(!url.startsWith('https://')||!key){authErr('#cfgErr','URL ou clé invalide.');return;}
-  setCfg({url,key});$('#setupScreen').style.display='none';boot();
+  const url=cleanUrl($('#cfgUrl').value),key=$('#cfgKey').value.trim();
+  if(!url.startsWith('https://')||!/\.supabase\.co$/i.test(url)||!key){
+    authErr('#cfgErr','URL invalide. Attendu : https://xxxx.supabase.co (sans /rest/v1). Vérifiez aussi la clé anon.');return;
+  }
+  setCfg({url,key});$('#cfgErr').style.display='none';$('#setupScreen').style.display='none';boot();
 };
 $('#resetCfg').onclick=()=>{setCfg({});memCfg=null;try{localStorage.removeItem(CFGKEY);}catch(e){}
   $('#loginScreen').style.display='none';$('#setupScreen').style.display='flex';};
@@ -800,6 +832,13 @@ function renderPortfolio(){
         <div class="pbar" style="flex:1"><div style="width:${pct}%"></div></div>
         <span style="font-size:12px;color:var(--muted)">${pct}%</span>
       </div>
+      ${(c.interlocutor||c.phone||c.email||c.address)?`<div class="pf-contact">
+        ${c.interlocutor?`<span title="Interlocuteur">👤 ${esc(c.interlocutor)}</span>`:''}
+        ${c.phone?`<a href="tel:${esc(c.phone.split('/')[0].trim())}" title="Téléphone">📞 ${esc(c.phone)}</a>`:''}
+        ${c.email?`<a href="mailto:${esc(c.email.split('/')[0].trim())}" title="Mail">✉️ ${esc(c.email)}</a>`:''}
+        ${c.address?`<span title="Adresse">📍 ${esc(c.address)}</span>`:''}
+        <button class="btn sm pf-edit" data-id="${c.id}" title="Modifier la fiche">✎</button>
+      </div>`:`<div class="pf-contact"><button class="btn sm pf-edit" data-id="${c.id}">＋ Ajouter les coordonnées</button></div>`}
       <div class="pf-list">${active.sort((a,b)=>(isLate(b)-isLate(a))||(PRIO[a.priority].rank-PRIO[b.priority].rank)).map(t=>`
         <div class="pf-task" data-id="${t.id}">
           <span class="badge-s ${STAT[t.status].cls}" style="font-size:11px"><span class="dot"></span>${STAT[t.status].lbl}</span>
@@ -814,6 +853,7 @@ function bindPortfolio(){
   $$('#view-portfolio .pf-task').forEach(el=>el.onclick=()=>openModal(el.dataset.id));
   $$('#view-portfolio .pf-add').forEach(b=>b.onclick=()=>{openModal(null);$('#f_client').value=b.dataset.id;});
   $$('#view-portfolio .pf-bases').forEach(b=>b.onclick=()=>{basesClient=b.dataset.id;setView('bases');});
+  $$('#view-portfolio .pf-edit').forEach(b=>b.onclick=()=>openClientModal(b.dataset.id));
   $$('#view-portfolio .pf-type').forEach(s=>s.onchange=async()=>{
     await sb.from('clients').update({type:s.value}).eq('id',s.dataset.id);
     const c=DB.clients.find(c=>c.id===s.dataset.id);if(c)c.type=s.value;
@@ -831,6 +871,18 @@ function bindPortfolio(){
     if(error){alert('Ce dossier existe peut-être déjà.');return;}
     DB.clients.push(data);DB.clients.sort((a,b)=>a.name.localeCompare(b.name,'fr'));render();
   };
+}
+let editingClient=null;
+function openClientModal(id){
+  const c=DB.clients.find(x=>x.id===id);if(!c)return;
+  editingClient=id;
+  $('#cm_title').textContent='Fiche dossier — '+c.name;
+  $('#cm_name').value=c.name;
+  $('#cm_interlocutor').value=c.interlocutor||'';
+  $('#cm_address').value=c.address||'';
+  $('#cm_phone').value=c.phone||'';
+  $('#cm_email').value=c.email||'';
+  $('#clientOverlay').classList.add('open');
 }
 /* ================= TÂCHES / KANBAN ================= */
 function renderTasks(){
@@ -997,6 +1049,40 @@ $('#deleteTaskBtn').onclick=async()=>{
   }
 };
 $('#newTaskBtn').onclick=()=>openModal(null);
+
+/* Fiche client */
+$('#cm_cancel').onclick=()=>$('#clientOverlay').classList.remove('open');
+$('#clientOverlay').onclick=e=>{if(e.target===$('#clientOverlay'))$('#clientOverlay').classList.remove('open');};
+$('#cm_save').onclick=async()=>{
+  const c=DB.clients.find(x=>x.id===editingClient);if(!c)return;
+  const patch={interlocutor:$('#cm_interlocutor').value.trim(),address:$('#cm_address').value.trim(),
+    phone:$('#cm_phone').value.trim(),email:$('#cm_email').value.trim()};
+  Object.assign(c,patch);
+  const {error}=await sb.from('clients').update(patch).eq('id',editingClient);
+  setSync(!error);
+  $('#clientOverlay').classList.remove('open');
+  render();
+};
+$('#cm_delete').onclick=async()=>{
+  const c=DB.clients.find(x=>x.id===editingClient);if(!c)return;
+  const nTasks=DB.tasks.filter(t=>t.client_id===c.id).length;
+  const nJourn=DB.journals.filter(j=>j.client_id===c.id).length;
+  if(nTasks||nJourn){
+    alert(`Impossible de supprimer « ${c.name} » : ce dossier contient encore `+
+      [nTasks?`${nTasks} tâche(s)`:null,nJourn?`${nJourn} code(s) journal / déclaration(s)`:null].filter(Boolean).join(' et ')+
+      `.\n\nAvant de le supprimer :\n• réaffectez ou supprimez ses tâches (vue Tâches),\n• et supprimez ses codes journaux (vue Suivi des bases).`);
+    return;
+  }
+  if(!confirm(`Supprimer définitivement le dossier « ${c.name} » ?\nCette action est irréversible.`))return;
+  const {error}=await sb.from('clients').delete().eq('id',c.id);
+  if(error){alert('Suppression impossible : '+error.message);setSync(false);return;}
+  DB.clients=DB.clients.filter(x=>x.id!==c.id);
+  if(basesClient===c.id)basesClient=DB.clients[0]?.id||'';
+  log(null,'Dossier supprimé',`Suppression du dossier « ${c.name} »`);
+  setSync(true);
+  $('#clientOverlay').classList.remove('open');
+  render();
+};
 /* ================= SUIVI DES BASES ================= */
 function monthMark(jid,year,month){
   const m=DB.months.find(x=>x.journal_id===jid&&x.year===year&&x.month===month);
@@ -1018,7 +1104,9 @@ function renderBases(){
     <select id="basesClientSel">${DB.clients.map(x=>`<option value="${x.id}" ${x.id===basesClient?'selected':''}>${esc(x.name)}</option>`).join('')}</select>
     <select id="basesYearSel">${years.map(y=>`<option ${y===basesYear?'selected':''}>${y}</option>`).join('')}</select>
     ${c?`<span class="badge-type ${c.type==='ANNUEL'?'annuel':''}">${esc(c.type||'MENSUEL')}</span>
-    <span class="section-note" style="margin:0">Responsable : <b>${esc(clientResp(c))||'—'}</b></span>`:''}
+    <span class="section-note" style="margin:0">Responsable : <b>${esc(clientResp(c))||'—'}</b></span>
+    ${c.interlocutor?`<span class="section-note" style="margin:0">· 👤 ${esc(c.interlocutor)}</span>`:''}
+    ${c.phone?`<span class="section-note" style="margin:0">· 📞 ${esc(c.phone)}</span>`:''}`:''}
     <span class="spacer" style="flex:1"></span>
     <span class="section-note" style="margin:0">Cliquez sur une case mois pour cocher ✕ · saisissez le nombre de pièces du lundi</span>
   </div>`;
@@ -1313,11 +1401,11 @@ $('#importFile').onchange=async e=>{
   try{
     const buf=await file.arrayBuffer();
     const wb=XLSX.read(buf,{type:'array',cellDates:true});
-    /* Détection automatique du format */
-    const isBases=wb.SheetNames.some(n=>n.toUpperCase().includes('BASE DE DONNEES'))||
-      wb.SheetNames.some(n=>{
+    /* Détection automatique du format : un classeur de bases contient
+       au moins une feuille avec un en-tête « Code journal ». */
+    const isBases=wb.SheetNames.some(n=>{
         const rows=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:'',raw:true});
-        return rows.some(r=>String(r[0]).toLowerCase().startsWith('code journal'));
+        return rows.some(r=>r.some(c=>String(c).toLowerCase().trim().startsWith('code journal')));
       });
     if(isBases)await importBases(wb,file.name);
     else await importTasks(wb,file.name);
@@ -1329,13 +1417,13 @@ async function ensureClient(name,extra={}){
   name=name.trim().toUpperCase();
   let c=DB.clients.find(x=>x.name.toUpperCase()===name);
   if(c){
-    if(Object.keys(extra).length){
-      const patch={};
-      if(extra.type&&!c.type)patch.type=extra.type;
-      if(extra.responsible_name&&!c.responsible_id&&!c.responsible_name)patch.responsible_name=extra.responsible_name;
-      if(extra.responsible_id&&!c.responsible_id)patch.responsible_id=extra.responsible_id;
-      if(Object.keys(patch).length){await sb.from('clients').update(patch).eq('id',c.id);Object.assign(c,patch);}
-    }
+    const patch={};
+    if(extra.type&&!c.type)patch.type=extra.type;
+    if(extra.responsible_name&&!c.responsible_id&&!c.responsible_name)patch.responsible_name=extra.responsible_name;
+    if(extra.responsible_id&&!c.responsible_id)patch.responsible_id=extra.responsible_id;
+    /* Complète les coordonnées si vides (l'import ne les écrase pas si déjà saisies) */
+    ['interlocutor','address','phone','email'].forEach(k=>{if(extra[k]&&!c[k])patch[k]=extra[k];});
+    if(Object.keys(patch).length){await sb.from('clients').update(patch).eq('id',c.id);Object.assign(c,patch);}
     return c;
   }
   const {data,error}=await sb.from('clients').insert({name,...extra}).select().single();
@@ -1378,21 +1466,44 @@ async function importTasks(wb,fname){
 async function importBases(wb,fname){
   let nClients=0,nJournals=0,nMarks=0,nCounts=0;
   const year=new Date().getFullYear();
-  /* 1) Feuille BASE DE DONNEES : dossiers + type + responsable */
-  const bdName=wb.SheetNames.find(n=>n.toUpperCase().includes('BASE DE DONNEES'));
-  if(bdName){
-    const rows=XLSX.utils.sheet_to_json(wb.Sheets[bdName],{header:1,defval:''});
-    for(let i=1;i<rows.length;i++){
-      const name=(rows[i][0]??'').toString().trim();
-      if(!name)continue;
-      const type=(rows[i][1]??'').toString().trim().toUpperCase()||'MENSUEL';
-      const resp=(rows[i][2]??'').toString().trim();
+  const norm=s=>(s??'').toString().trim();
+  /* 1) Feuille récapitulative des dossiers : « Liste des dossiers clients »,
+     « BASE DE DONNEES »… On la reconnaît par un en-tête « DOSSIERS ».
+     La colonne « DOSSIERS » peut être en A ou en B (numéro en A). */
+  let listName=null,listRows=null,colDoss=0,colType=1,colResp=2,colInt=-1,colAdr=-1,colTel=-1,colMail=-1;
+  for(const n of wb.SheetNames){
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:''});
+    const hIdx=rows.findIndex(r=>r.some(c=>norm(c).toUpperCase()==='DOSSIERS'));
+    if(hIdx>=0){
+      const hdr=rows[hIdx].map(c=>norm(c).toUpperCase());
+      colDoss=hdr.indexOf('DOSSIERS');
+      colType=hdr.findIndex(c=>c.includes('TYPE'));if(colType<0)colType=colDoss+1;
+      colResp=hdr.findIndex(c=>c.includes('RESPONSABLE'));if(colResp<0)colResp=colDoss+2;
+      colInt=hdr.findIndex(c=>c.includes('INTERLOCUTEUR'));
+      colAdr=hdr.findIndex(c=>c.includes('ADRESSE'));
+      colTel=hdr.findIndex(c=>c.includes('TÉL')||c.includes('TEL'));
+      colMail=hdr.findIndex(c=>c.includes('MAIL')||c.includes('E-MAIL')||c.includes('EMAIL'));
+      listName=n;listRows=rows.slice(hIdx+1);break;
+    }
+  }
+  if(listRows){
+    for(const r of listRows){
+      const name=norm(r[colDoss]);
+      if(!name||name.toUpperCase()==='DOSSIERS')continue;
+      const type=norm(r[colType]).toUpperCase()||'MENSUEL';
+      const resp=norm(r[colResp]);
       const prof=DB.profiles.find(p=>p.full_name.toUpperCase()===resp.toUpperCase());
+      const contact={};
+      if(colInt>=0&&norm(r[colInt]))contact.interlocutor=norm(r[colInt]);
+      if(colAdr>=0&&norm(r[colAdr]))contact.address=norm(r[colAdr]);
+      if(colTel>=0&&norm(r[colTel]))contact.phone=norm(r[colTel]);
+      if(colMail>=0&&norm(r[colMail]))contact.email=norm(r[colMail]);
       const before=DB.clients.length;
-      await ensureClient(name,{type,responsible_name:resp,...(prof?{responsible_id:prof.id}:{})});
+      await ensureClient(name,{type,responsible_name:resp,...(prof?{responsible_id:prof.id}:{}),...contact});
       if(DB.clients.length>before)nClients++;
     }
   }
+  const bdName=listName;
   /* 2) Une feuille par client : tenue + déclarations */
   const monthIdx=h=>{const s=String(h).toLowerCase().slice(0,4);
     return MONTHS.findIndex(m=>m.toLowerCase().startsWith(s.slice(0,3)))};
@@ -1456,15 +1567,16 @@ async function importBases(wb,fname){
 
 /* ================= EXPORT / IMPRESSION ================= */
 $('#exportXlsBtn').onclick=()=>{
-  const rows=DB.tasks.map(t=>({
-    'ID':tnum(t),'Intitulé':t.title,'Description':t.description,'Client / Dossier':clientName(t.client_id),'Catégorie':t.category,
+  const rows=DB.tasks.map(t=>{const c=DB.clients.find(x=>x.id===t.client_id)||{};return {
+    'ID':tnum(t),'Intitulé':t.title,'Description':t.description,'Client / Dossier':clientName(t.client_id),
+    'Interlocuteur':c.interlocutor||'','Téléphone':c.phone||'','Mail':c.email||'','Catégorie':t.category,
     'Responsable':profName(t.assignee_id),'Priorité':PRIO[t.priority].lbl,'Statut':STAT[t.status].lbl,
     'Avancement (%)':t.status==='done'?100:t.progress,'Créée le':fmtTS(t.created_at),
     'Début prévu':t.start_date||'','Date limite':t.due_date||'','Durée estimée':t.est_duration,
     'Dernière action':t.last_action,'Prochaine action':t.next_action,'Commentaires':t.comments,
     'Cause blocage':t.block_cause,'Action nécessaire':t.block_action,'Personne attendue':t.block_person,
     'Terminée le':t.completed_at?fmtTS(t.completed_at):''
-  }));
+  };});
   const ws=XLSX.utils.json_to_sheet(rows.length?rows:[{'ID':''}]);
   ws['!cols']=Object.keys(rows[0]||{ID:1}).map(k=>({wch:Math.max(14,k.length+2)}));
   const wb=XLSX.utils.book_new();
