@@ -287,6 +287,7 @@ td .t-sub{font-size:12px;color:var(--faint)}
 .mcell:hover{outline:2px solid var(--blue-line)}
 .cnt-prev{color:var(--faint);font-variant-numeric:tabular-nums}
 .cnt-cur input{width:62px;text-align:center;border:1px solid var(--line);border-radius:7px;padding:5px 4px;font-size:13px}
+.cnt-old input{background:#fbfcfe;color:var(--muted)}
 .delta{font-size:11.5px;font-weight:700;border-radius:99px;padding:1px 7px;white-space:nowrap}
 .delta.up{background:var(--green-bg);color:var(--green)}
 .delta.zero{background:var(--gray-badge);color:var(--muted)}
@@ -491,6 +492,8 @@ let sb=null,me=null,rtChannel=null;
 let DB={profiles:[],clients:[],tasks:[],history:[],journals:[],months:[],counts:[]};
 let currentView='dash',editingId=null,scope='me';
 let basesClient='',basesYear=new Date().getFullYear(),basesWeek='';
+let basesExtraWeeks={};           /* clientId -> lundis ajoutés manuellement */
+const WEEK_WINDOW=8;              /* nombre max de colonnes-semaine affichées */
 let pfQuery='',pfResp='all';
 let filters={q:'',client:'',category:'',assignee:'',priority:'',status:'',due:''};
 
@@ -1121,14 +1124,20 @@ function weekDates(clientJournals){
   clientJournals.forEach(j=>countsFor(j.id).forEach(c=>s.add(c.week_date)));
   return [...s].sort();
 }
+function nextMonday(isoDate){const d=new Date(isoDate+'T00:00:00');d.setDate(d.getDate()+7);return iso(d);}
+function displayWeeks(tenue,clientId){
+  const s=new Set(weekDates(tenue));
+  s.add(iso(mondayOf(today())));                     /* la semaine en cours est toujours visible */
+  (basesExtraWeeks[clientId]||[]).forEach(w=>s.add(w));
+  let arr=[...s].sort();
+  if(arr.length>WEEK_WINDOW)arr=arr.slice(-WEEK_WINDOW);   /* on garde les dernières semaines */
+  return arr;
+}
 function renderBases(){
   if(!basesClient&&DB.clients.length)basesClient=DB.clients[0].id;
   const c=DB.clients.find(x=>x.id===basesClient);
   const cy=new Date().getFullYear();
   const years=[...new Set([cy-1,cy,cy+1,basesYear])].sort();
-  if(!basesWeek)basesWeek=iso(mondayOf(today()));
-  const thisMonday=iso(mondayOf(today()));
-  const isThisWeek=basesWeek===thisMonday;
   const bar=`<div class="bases-bar no-print">
     <select id="basesClientSel">${DB.clients.map(x=>`<option value="${x.id}" ${x.id===basesClient?'selected':''}>${esc(x.name)}</option>`).join('')}</select>
     <select id="basesYearSel">${years.map(y=>`<option ${y===basesYear?'selected':''}>${y}</option>`).join('')}</select>
@@ -1137,63 +1146,63 @@ function renderBases(){
     ${c.interlocutor?`<span class="section-note" style="margin:0">· 👤 ${esc(c.interlocutor)}</span>`:''}
     ${c.phone?`<span class="section-note" style="margin:0">· 📞 ${esc(c.phone)}</span>`:''}`:''}
     <span class="spacer" style="flex:1"></span>
-    <label style="font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px">Semaine de saisie :
-      <input type="date" id="basesWeekSel" value="${basesWeek}" title="Lundi de la semaine à saisir"></label>
-    ${!isThisWeek?`<button class="btn sm" id="basesWeekNow" title="Revenir à la semaine en cours">Cette semaine</button>`:''}
+    <span class="section-note" style="margin:0">Cliquez une case mois pour cocher ✕ · saisissez les pièces dans les colonnes de lundi</span>
   </div>`;
   if(!c){$('#view-bases').innerHTML=bar+'<div class="empty-state"><div class="big">▤</div>Créez d\u2019abord un dossier client (vue Portefeuille) ou importez votre fichier de bases.</div>';bindBasesBar();return;}
 
   const tenue=DB.journals.filter(j=>j.client_id===c.id&&j.section==='tenue');
   const decls=DB.journals.filter(j=>j.client_id===c.id&&j.section==='declaration');
-  const curMonday=basesWeek;                         /* semaine active (saisie) */
-  const allWeeks=weekDates(tenue);
-  const prevWeeks=allWeeks.filter(w=>w<curMonday).slice(-3);   /* 3 derniers relevés avant la semaine active */
-  const lastPrev=prevWeeks[prevWeeks.length-1]||null;
+  const weeks=displayWeeks(tenue,c.id);              /* colonnes de lundis affichées */
+  const thisMonday=iso(mondayOf(today()));
 
   const monthHead=MONTHS_S.map(m=>`<th>${m}</th>`).join('');
   const monthCells=j=>MONTHS_S.map((_,i)=>{
     const on=monthMark(j.id,basesYear,i+1);
     return `<td class="mcell ${on?'on':''}" data-j="${j.id}" data-m="${i+1}">${on?'✕':''}</td>`;
   }).join('');
+  const val=(jid,w)=>{const x=countsFor(jid).find(y=>y.week_date===w);return x?x.count:null;};
 
   const tenueRows=tenue.map(j=>{
-    const cs=countsFor(j.id);
-    const cur=cs.find(x=>x.week_date===curMonday);
-    const prev=lastPrev?cs.find(x=>x.week_date===lastPrev):null;
-    const d=(cur&&prev)?cur.count-prev.count:(cur&&!prev&&cur.count>0?cur.count:null);
+    const last=weeks.length>=2?val(j.id,weeks[weeks.length-1]):null;
+    const prev=weeks.length>=2?val(j.id,weeks[weeks.length-2]):null;
+    const d=(last!=null&&prev!=null)?last-prev:null;
     return `<tr>
       <td class="lft code">${esc(j.code)}</td><td class="lft lib" title="${esc(j.label)}">${esc(j.label)}</td>
       ${monthCells(j)}
-      ${prevWeeks.map(w=>{const pc=cs.find(x=>x.week_date===w);return `<td class="cnt-prev">${pc?pc.count:'·'}</td>`;}).join('')}
-      <td class="cnt-cur"><input type="number" min="0" data-j="${j.id}" value="${cur?cur.count:''}" placeholder="—"></td>
-      <td>${d===null?'':`<span class="delta ${d>0?'up':d<0?'dn':'zero'}">${d>0?'+':''}${d}</span>`}</td>
+      ${weeks.map((w,wi)=>{const v=val(j.id,w);const isLast=wi===weeks.length-1;
+        return `<td class="cnt-cur ${isLast?'':'cnt-old'}"><input type="number" min="0" data-j="${j.id}" data-w="${w}" value="${v==null?'':v}" placeholder="—"></td>`;}).join('')}
+      <td class="row-delta" data-j="${j.id}">${d===null?'':`<span class="delta ${d>0?'up':d<0?'dn':'zero'}">${d>0?'+':''}${d}</span>`}</td>
       <td><button class="jdel" data-j="${j.id}" title="Supprimer ce code journal">✕</button></td>
     </tr>`;
   }).join('');
   const tot=w=>tenue.reduce((a,j)=>{const x=countsFor(j.id).find(y=>y.week_date===w);return a+(x?x.count:0);},0);
-  const totCur=tot(curMonday),totPrev=lastPrev?tot(lastPrev):0;
-  const totDelta=lastPrev?totCur-totPrev:null;
+  const tLast=weeks.length>=2?tot(weeks[weeks.length-1]):0,tPrev=weeks.length>=2?tot(weeks[weeks.length-2]):0;
+  const tDelta=weeks.length>=2?tLast-tPrev:null;
 
   const declRows=decls.map(j=>`<tr>
       <td class="lft code" colspan="2">${esc(j.code)}</td>
       ${monthCells(j)}
-      <td colspan="${prevWeeks.length+2}"></td>
-      <td><button class="jdel" data-j="${j.id}" title="Supprimer">✕</button></td>
+      <td colspan="${weeks.length+2}"></td>
     </tr>`).join('');
+
+  const weekHead=weeks.map(w=>{const isNow=w===thisMonday,isFut=w>thisMonday;
+    return `<th style="${isNow?'color:var(--blue)':isFut?'color:var(--violet)':''}" title="${isFut?'Semaine à venir':isNow?'Semaine en cours':'Semaine passée'}">Lun. ${fmtDs(w)}${isNow?' •':''}</th>`;}).join('');
 
   $('#view-bases').innerHTML=bar+`
     <div class="card" style="padding:0;overflow:hidden">
-      <h3 style="padding:16px 18px 0">Situation de la tenue — ${esc(c.name)} · ${basesYear}</h3>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px 0;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0">Situation de la tenue — ${esc(c.name)} · ${basesYear}</h3>
+        <button class="btn sm no-print" id="addWeekBtn" title="Ajouter la semaine (lundi) suivante">＋ Semaine suivante</button>
+      </div>
       <div class="bt-wrap" style="border:0;box-shadow:none;margin:0">
       <table class="bt"><thead><tr>
         <th class="lft">Code</th><th class="lft">Intitulé journal</th>${monthHead}
-        ${prevWeeks.map(w=>`<th title="Relevé précédent">${fmtDs(w)}</th>`).join('')}
-        <th style="color:var(--blue)">Lundi ${fmtDs(curMonday)}</th><th>Évol.</th><th></th>
+        ${weekHead}<th>Évol.</th><th></th>
       </tr></thead><tbody>
-        ${tenueRows||`<tr><td colspan="${17+prevWeeks.length}" style="color:var(--faint);font-style:italic;padding:16px">Aucun code journal — ajoutez-en ci-dessous.</td></tr>`}
+        ${tenueRows||`<tr><td colspan="${16+weeks.length}" style="color:var(--faint);font-style:italic;padding:16px">Aucun code journal — ajoutez-en ci-dessous.</td></tr>`}
         ${tenue.length?`<tr style="background:#f9fafc;font-weight:700"><td class="lft" colspan="2">TOTAL PIÈCES</td><td colspan="12"></td>
-          ${prevWeeks.map(w=>`<td class="cnt-prev">${tot(w)}</td>`).join('')}
-          <td>${totCur||''}</td><td>${totDelta===null?'':`<span class="delta ${totDelta>0?'up':totDelta<0?'dn':'zero'}">${totDelta>0?'+':''}${totDelta}</span>`}</td><td></td></tr>`:''}
+          ${weeks.map(w=>`<td class="cnt-prev wk-tot" data-w="${w}">${tot(w)||''}</td>`).join('')}
+          <td class="tot-delta">${tDelta===null?'':`<span class="delta ${tDelta>0?'up':tDelta<0?'dn':'zero'}">${tDelta>0?'+':''}${tDelta}</span>`}</td><td></td></tr>`:''}
       </tbody></table></div>
       <div class="addrow no-print">
         <b style="font-size:12.5px">＋ Code journal :</b>
@@ -1206,9 +1215,9 @@ function renderBases(){
       <h3 style="padding:16px 18px 0">Situation des déclarations — ${esc(c.name)} · ${basesYear}</h3>
       <div class="bt-wrap" style="border:0;box-shadow:none;margin:0">
       <table class="bt"><thead><tr>
-        <th class="lft" colspan="2">Déclaration</th>${monthHead}<th colspan="${prevWeeks.length+2}"></th><th></th>
+        <th class="lft" colspan="2">Déclaration</th>${monthHead}<th colspan="${weeks.length+2}"></th>
       </tr></thead><tbody>
-        ${declRows||`<tr><td colspan="${17+prevWeeks.length}" style="color:var(--faint);font-style:italic;padding:16px">Aucune déclaration suivie — ajoutez-en ci-dessous.</td></tr>`}
+        ${declRows||`<tr><td colspan="${16+weeks.length}" style="color:var(--faint);font-style:italic;padding:16px">Aucune déclaration suivie — ajoutez-en ci-dessous.</td></tr>`}
       </tbody></table></div>
       <div class="addrow no-print">
         <b style="font-size:12.5px">＋ Déclaration :</b>
@@ -1216,15 +1225,13 @@ function renderBases(){
         <button class="btn sm primary" id="ndAdd">Ajouter</button>
       </div>
     </div>`;
-  bindBasesBar();bindBasesGrid(c);
+  bindBasesBar();bindBasesGrid(c,weeks);
 }
 function bindBasesBar(){
   const cs=$('#basesClientSel');if(cs)cs.onchange=()=>{basesClient=cs.value;renderBases();};
   const ys=$('#basesYearSel');if(ys)ys.onchange=()=>{basesYear=+ys.value;renderBases();};
-  const ws=$('#basesWeekSel');if(ws)ws.onchange=()=>{basesWeek=ws.value?iso(mondayOf(new Date(ws.value+'T00:00:00'))):iso(mondayOf(today()));renderBases();};
-  const wn=$('#basesWeekNow');if(wn)wn.onclick=()=>{basesWeek=iso(mondayOf(today()));renderBases();};
 }
-function bindBasesGrid(c){
+function bindBasesGrid(c,weeks){
   /* Croix mensuelles */
   $$('#view-bases .mcell').forEach(td=>td.onclick=async()=>{
     const jid=td.dataset.j,m=+td.dataset.m;
@@ -1236,23 +1243,48 @@ function bindBasesGrid(c){
     const {error}=await sb.from('journal_months').upsert(row);
     setSync(!error);
   });
-  /* Saisie des pièces de la semaine active */
+  /* Saisie des pièces — une colonne = un lundi (data-w). Pas de re-render
+     complet (on garde le focus) : on recalcule totaux et deltas en place. */
+  const recalc=()=>{
+    const tenue=DB.journals.filter(j=>j.client_id===c.id&&j.section==='tenue');
+    const tot=w=>tenue.reduce((a,j)=>{const x=countsFor(j.id).find(y=>y.week_date===w);return a+(x?x.count:0);},0);
+    const val=(jid,w)=>{const x=countsFor(jid).find(y=>y.week_date===w);return x?x.count:null;};
+    $$('#view-bases .row-delta').forEach(td=>{
+      const jid=td.dataset.j;
+      const last=weeks.length>=2?val(jid,weeks[weeks.length-1]):null;
+      const prev=weeks.length>=2?val(jid,weeks[weeks.length-2]):null;
+      const d=(last!=null&&prev!=null)?last-prev:null;
+      td.innerHTML=d===null?'':`<span class="delta ${d>0?'up':d<0?'dn':'zero'}">${d>0?'+':''}${d}</span>`;
+    });
+    $$('#view-bases .wk-tot').forEach(td=>{const w=td.dataset.w;td.textContent=tot(w)||'';});
+    const tt=$('#view-bases .tot-delta');
+    if(tt&&weeks.length>=2){const d=tot(weeks[weeks.length-1])-tot(weeks[weeks.length-2]);
+      tt.innerHTML=`<span class="delta ${d>0?'up':d<0?'dn':'zero'}">${d>0?'+':''}${d}</span>`;}
+  };
   $$('#view-bases .cnt-cur input').forEach(inp=>inp.onchange=async()=>{
-    const jid=inp.dataset.j,wk=basesWeek;
-    const val=inp.value===''?null:Math.max(0,parseInt(inp.value)||0);
-    if(val===null){
+    const jid=inp.dataset.j,wk=inp.dataset.w;
+    const value=inp.value===''?null:Math.max(0,parseInt(inp.value)||0);
+    if(value===null){
       DB.counts=DB.counts.filter(x=>!(x.journal_id===jid&&x.week_date===wk));
       const {error}=await sb.from('piece_counts').delete().eq('journal_id',jid).eq('week_date',wk);
       setSync(!error);
     }else{
-      const row={journal_id:jid,week_date:wk,count:val,entered_by:me.id};
+      const row={journal_id:jid,week_date:wk,count:value,entered_by:me.id};
       const ex=DB.counts.find(x=>x.journal_id===jid&&x.week_date===wk);
-      if(ex)ex.count=val;else DB.counts.push(row);
+      if(ex)ex.count=value;else DB.counts.push(row);
       const {error}=await sb.from('piece_counts').upsert(row);
       setSync(!error);
     }
-    renderBases();
+    recalc();
   });
+  /* Ajouter la semaine (lundi) suivante */
+  const aw=$('#addWeekBtn');
+  if(aw)aw.onclick=()=>{
+    const last=weeks[weeks.length-1]||iso(mondayOf(today()));
+    const nxt=nextMonday(last);
+    (basesExtraWeeks[c.id]=basesExtraWeeks[c.id]||[]).push(nxt);
+    renderBases();
+  };
   /* Suppression code journal */
   $$('#view-bases .jdel').forEach(b=>b.onclick=async()=>{
     const j=DB.journals.find(x=>x.id===b.dataset.j);
@@ -1396,12 +1428,35 @@ function renderAdmin(){
       </div>
       <div class="auth-err" id="nuErr" style="display:none"></div>
       <button class="btn primary" id="nuBtn" style="margin-top:12px">Créer le compte</button>
+    </div>
+    <div class="card" style="border:1px solid #f3b4ae">
+      <h3 style="color:var(--red)">⚠️ Zone sensible — réinitialisation</h3>
+      <p class="section-note" style="margin:0 0 12px">Supprime <b>tous les dossiers clients</b> et leurs données de bases (codes journaux, croix, pièces). Utile avant de réimporter un fichier à jour. Les tâches sont conservées mais perdent leur dossier associé.</p>
+      <p class="section-note" style="margin:0 0 12px">${DB.clients.length} dossier(s), ${DB.journals.length} code(s) journal, ${DB.counts.length} relevé(s) actuellement.</p>
+      <button class="btn danger" id="wipeClientsBtn">Supprimer tous les dossiers</button>
     </div>`;
   $$('#view-admin .roleBtn').forEach(b=>b.onclick=async()=>{
     const {error}=await sb.from('profiles').update({role:b.dataset.role}).eq('id',b.dataset.id);
     if(!error){const p=DB.profiles.find(p=>p.id===b.dataset.id);p.role=b.dataset.role;render();}
   });
   $('#nuBtn').onclick=createUser;
+  $('#wipeClientsBtn').onclick=wipeClients;
+}
+async function wipeClients(){
+  if(!DB.clients.length){alert('Aucun dossier à supprimer.');return;}
+  const rep=prompt(`Cette action supprime définitivement les ${DB.clients.length} dossiers et toutes leurs données de bases.\n\nPour confirmer, tapez :  SUPPRIMER`);
+  if(rep===null)return;
+  if(rep.trim().toUpperCase()!=='SUPPRIMER'){alert('Confirmation incorrecte. Aucune suppression effectuée.');return;}
+  const btn=$('#wipeClientsBtn');btn.disabled=true;btn.textContent='Suppression…';
+  /* La suppression des dossiers efface en cascade journaux, croix et pièces (ON DELETE CASCADE) */
+  const {error}=await sb.from('clients').delete().neq('id','00000000-0000-0000-0000-000000000000');
+  if(error){alert('Suppression impossible : '+error.message);setSync(false);btn.disabled=false;btn.textContent='Supprimer tous les dossiers';return;}
+  DB.clients=[];DB.journals=[];DB.months=[];DB.counts=[];basesClient='';basesExtraWeeks={};
+  DB.tasks.forEach(t=>t.client_id=null);
+  log(null,'Réinitialisation','Suppression de tous les dossiers et de leurs données de bases');
+  setSync(true);
+  alert('Tous les dossiers ont été supprimés. Vous pouvez maintenant réimporter votre fichier via « ⬆ Importer ».');
+  render();
 }
 async function createUser(){
   const name=$('#nuName').value.trim(),u=$('#nuUser').value.trim().toLowerCase().replace(/[^a-z0-9._-]/g,''),
