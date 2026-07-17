@@ -1,0 +1,83 @@
+SAUVEGARDE AUTOMATIQUE VERS GOOGLE DRIVE — GUIDE (≈ 10 min, une seule fois)
+==========================================================================
+
+Ce que ça fait : chaque lundi vers 23h, un fichier Google Sheets daté est
+créé automatiquement dans votre dossier Drive. Il est au FORMAT LISIBLE :
+- une feuille par client (comme votre Excel : code journal, mois Jan→Déc
+  avec les X, pièces par semaine, total),
+- une feuille "Liste des dossiers" (type, responsable, coordonnées),
+- une feuille "Tâches".
+Vous partagez ce dossier une fois avec les autres admins ; ils reçoivent
+alors chaque nouvelle sauvegarde. Aucune manipulation hebdomadaire.
+
+Le FOLDER_ID de votre sous-dossier est déjà renseigné dans le script.
+Il ne vous reste qu'une valeur à coller : la clé "service_role".
+
+
+ÉTAPE 1 — LE DOSSIER DRIVE (déjà fait)
+--------------------------------------
+Votre sous-dossier de destination est déjà créé et son ID est déjà
+renseigné dans le script (FOLDER_ID). Il fonctionne aussi bien dans
+"Mon Drive" que dans un Drive partagé (Team Drive).
+Pensez juste à partager ce dossier avec les autres admins :
+clic droit sur le dossier > Partager > ajoutez leurs mails.
+
+
+ÉTAPE 2 — RÉCUPÉRER LA CLÉ service_role
+---------------------------------------
+1. Supabase > votre projet > Settings > API.
+2. Section « Project API keys » > ligne « service_role » > cliquez « Reveal »
+   et copiez la clé (longue, commence par eyJ...).
+
+⚠️ IMPORTANT : cette clé est TRÈS puissante (accès total, contourne les
+   permissions). Elle ne doit JAMAIS être mise dans l'application Pilotage
+   ni partagée. Ici elle va uniquement dans votre script Google, qui est
+   privé à votre compte — c'est sûr, c'est le rôle prévu pour ce genre de tâche.
+
+
+ÉTAPE 3 — CRÉER LE SCRIPT
+-------------------------
+1. Allez sur https://script.google.com > « Nouveau projet ».
+2. Donnez-lui un nom, ex. « Sauvegarde Pilotage ».
+3. Supprimez le contenu par défaut et collez tout le contenu du fichier
+   « sauvegarde_drive.gs ».
+4. En haut du script, une seule valeur à remplacer :
+   - SERVICE_KEY = 'COLLEZ_ICI_VOTRE_CLE_SERVICE_ROLE'  -> votre clé service_role
+   (SUPABASE_URL et FOLDER_ID sont déjà renseignés.)
+5. Réglez le fuseau horaire : icône ⚙ « Paramètres du projet » >
+   « Fuseau horaire » > choisissez (GMT+00:00) — Dakar / Monrovia.
+   (Ainsi « 23h » = 23h à Dakar.)
+6. Enregistrez (icône disquette).
+
+
+ÉTAPE 4 — AUTORISER ET TESTER
+-----------------------------
+1. En haut, dans la liste des fonctions, choisissez « testerMaintenant »
+   puis cliquez « Exécuter ».
+2. Google demande une autorisation la première fois :
+   « Examiner les autorisations » > choisissez votre compte >
+   (si un écran « Google n'a pas validé cette application » apparaît :
+    « Paramètres avancés » > « Accéder à … (non sécurisé) » — c'est votre
+    propre script, sans risque) > « Autoriser ».
+3. Après quelques secondes, vérifiez dans votre dossier Drive : un fichier
+   « Pilotage_sauvegarde_AAAA-MM-JJ_HHMM » doit apparaître, avec un onglet
+   par table. 
+
+
+ÉTAPE 5 — PROGRAMMER LE LUNDI 23h
+---------------------------------
+1. Dans la liste des fonctions, choisissez « installerDeclencheur » >
+   « Exécuter ».
+2. C'est fait : chaque lundi vers 23h, la sauvegarde se lancera seule.
+   (Vérifiable dans l'icône ⏰ « Déclencheurs » à gauche.)
+
+
+BON À SAVOIR
+------------
+• Conservation : par défaut les sauvegardes de plus de 120 jours partent à
+  la corbeille (réglable via RETENTION_DAYS en haut du script ; 0 = tout garder).
+• Le fichier est un Google Sheets : ouvrable directement, exportable en Excel
+  (Fichier > Télécharger > Microsoft Excel).
+• Pour changer l'heure ou le jour : relancez « installerDeclencheur » après
+  avoir modifié atHour(23) / MONDAY dans le script.
+• Ce script lit les données ; il ne modifie jamais l'application.

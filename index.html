@@ -619,6 +619,11 @@ const tnum=t=>'T-'+String(t.num).padStart(3,'0');
 const clientName=id=>{const c=DB.clients.find(c=>c.id===id);return c?c.name:''};
 const profName=id=>{const p=DB.profiles.find(p=>p.id===id);return p?p.full_name:''};
 const clientResp=c=>c.responsible_id?profName(c.responsible_id):(c.responsible_name||'');
+/* Permissions d'écriture (doublées côté base par les règles RLS) */
+const isAdmin=()=>me&&me.role==='admin';
+const clientRespId=cid=>{const c=DB.clients.find(x=>x.id===cid);return c?c.responsible_id:null;};
+const canEditClient=c=>isAdmin()||(c&&c.responsible_id===me.id);
+const canEditTask=t=>isAdmin()||t.assignee_id===me.id||(t.client_id&&clientRespId(t.client_id)===me.id);
 const setSync=ok=>{$('#syncDot').classList.toggle('off',!ok);$('#syncLbl').textContent=ok?'Synchronisé':'Hors ligne';};
 
 /* ================= AUTH & CHARGEMENT ================= */
@@ -639,6 +644,7 @@ async function enter(){
   $('#meChip').innerHTML=`<b>${esc(me.full_name)}</b>${me.role==='admin'?'Administrateur':'Collaborateur'}`;
   $('#navAdmin').style.display=me.role==='admin'?'flex':'none';
   scope=me.role==='admin'?'all':'me';
+  pfResp=me.role==='admin'?'all':'mine';   /* portefeuille : collaborateur = ses dossiers par défaut */
   await loadAll();
   buildScopeSel();
   startRealtime();
@@ -928,6 +934,7 @@ function renderPortfolio(){
     const done=ts.filter(t=>t.status==='done').length;
     const late=ts.filter(isLate).length,blocked=ts.filter(t=>t.status==='blocked').length;
     const pct=ts.length?Math.round(ts.reduce((a,t)=>a+(t.status==='done'?100:t.progress),0)/ts.length):0;
+    const owns=canEditClient(c);
     return `<div class="card pf-card">
       <div class="pf-head"><h3 style="margin:0">🏢 ${esc(c.name)}</h3>
         <div style="display:flex;gap:6px">
@@ -935,13 +942,14 @@ function renderPortfolio(){
           <button class="btn sm primary pf-add" data-id="${c.id}">＋ Tâche</button>
         </div></div>
       <div class="pf-resp">
-        <select class="pf-type" data-id="${c.id}" style="border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:11.5px">
+        ${owns?`<select class="pf-type" data-id="${c.id}" style="border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:11.5px">
           <option ${c.type==='MENSUEL'?'selected':''}>MENSUEL</option><option ${c.type==='ANNUEL'?'selected':''}>ANNUEL</option>
         </select>
         <select class="pf-resp-sel" data-id="${c.id}" style="border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:11.5px;max-width:170px">
           <option value="">${esc(c.responsible_name||'— Responsable —')}</option>
           ${DB.profiles.map(p=>`<option value="${p.id}" ${c.responsible_id===p.id?'selected':''}>${esc(p.full_name)}</option>`).join('')}
-        </select>
+        </select>`:`<span class="badge-type ${c.type==='ANNUEL'?'annuel':''}">${esc(c.type||'MENSUEL')}</span>
+        <span class="section-note" style="margin:0">${esc(clientResp(c))||'—'}</span>`}
       </div>
       <div class="pf-stats">
         <span>${active.length} active(s)</span><span style="color:var(--green)">${done} terminée(s)</span>
@@ -957,8 +965,8 @@ function renderPortfolio(){
         ${c.phone?`<a href="tel:${esc(c.phone.split('/')[0].trim())}" title="Téléphone">📞 ${esc(c.phone)}</a>`:''}
         ${c.email?`<a href="mailto:${esc(c.email.split('/')[0].trim())}" title="Mail">✉️ ${esc(c.email)}</a>`:''}
         ${c.address?`<span title="Adresse">📍 ${esc(c.address)}</span>`:''}
-        <button class="btn sm pf-edit" data-id="${c.id}" title="Modifier la fiche">✎</button>
-      </div>`:`<div class="pf-contact"><button class="btn sm pf-edit" data-id="${c.id}">＋ Ajouter les coordonnées</button></div>`}
+        ${owns?`<button class="btn sm pf-edit" data-id="${c.id}" title="Modifier la fiche">✎</button>`:''}
+      </div>`:(owns?`<div class="pf-contact"><button class="btn sm pf-edit" data-id="${c.id}">＋ Ajouter les coordonnées</button></div>`:'')}
       <div class="pf-list">${active.sort((a,b)=>(isLate(b)-isLate(a))||(PRIO[a.priority].rank-PRIO[b.priority].rank)).map(t=>`
         <div class="pf-task" data-id="${t.id}">
           <span class="badge-s ${STAT[t.status].cls}" style="font-size:11px"><span class="dot"></span>${STAT[t.status].lbl}</span>
@@ -1069,6 +1077,7 @@ function renderKanban(){
     col.ondrop=async e=>{
       e.preventDefault();col.classList.remove('dragover');
       const id=e.dataTransfer.getData('text/plain');const t=DB.tasks.find(x=>x.id===id);
+      if(t&&!canEditTask(t)){alert('Vous ne pouvez pas modifier cette tâche (elle ne vous est pas assignée et n\u2019est pas sur votre dossier).');return;}
       if(t&&t.status!==col.dataset.col){
         const old=STAT[t.status].lbl;t.status=col.dataset.col;t.updated_at=new Date().toISOString();
         const patch={status:t.status,updated_at:t.updated_at};
@@ -1094,9 +1103,7 @@ function fillSelects(){
 function openModal(id){
   editingId=id||null;fillSelects();
   const t=id?DB.tasks.find(x=>x.id===id):null;
-  $('#modalTitle').textContent=t?'Fiche tâche':'Nouvelle tâche';
   $('#taskIdLbl').textContent=t?`${tnum(t)} · créée le ${fmtTS(t.created_at)}`:'';
-  $('#deleteTaskBtn').style.display=t?'inline-flex':'none';
   $('#f_title').value=t?.title||'';$('#f_desc').value=t?.description||'';
   $('#f_client').value=t?.client_id||'';$('#f_category').value=t?.category||'Client';
   $('#f_assignee').value=t?t.assignee_id||'':me.id;
@@ -1108,8 +1115,15 @@ function openModal(id){
   $('#f_comments').value=t?.comments||'';
   $('#f_blockCause').value=t?.block_cause||'';$('#f_blockAction').value=t?.block_action||'';$('#f_blockPerson').value=t?.block_person||'';
   toggleBlockFields();
+  /* Lecture seule si tâche existante non modifiable par ce collaborateur */
+  const ro=t?!canEditTask(t):false;
+  const F=['f_title','f_desc','f_client','f_category','f_assignee','f_duration','f_start','f_due','f_priority','f_status','f_progress','f_lastAction','f_nextAction','f_comments','f_blockCause','f_blockAction','f_blockPerson'];
+  F.forEach(id=>{const el=$('#'+id);if(el)el.disabled=ro;});
+  $('#modalTitle').textContent=t?(ro?'Fiche tâche (lecture seule)':'Fiche tâche'):'Nouvelle tâche';
+  $('#saveTaskBtn').style.display=ro?'none':'inline-flex';
+  $('#deleteTaskBtn').style.display=(t&&!ro)?'inline-flex':'none';
   $('#taskOverlay').classList.add('open');
-  setTimeout(()=>$('#f_title').focus(),50);
+  if(!ro)setTimeout(()=>$('#f_title').focus(),50);
 }
 function toggleBlockFields(){$('#blockFields').classList.toggle('show',$('#f_status').value==='blocked');}
 $('#f_status').onchange=toggleBlockFields;
@@ -1242,7 +1256,7 @@ function renderBases(){
     ${c.interlocutor?`<span class="section-note" style="margin:0">· 👤 ${esc(c.interlocutor)}</span>`:''}
     ${c.phone?`<span class="section-note" style="margin:0">· 📞 ${esc(c.phone)}</span>`:''}`:''}
     <span class="spacer" style="flex:1"></span>
-    <span class="section-note" style="margin:0">Cliquez une case mois pour cocher ✕ · saisissez les pièces dans les colonnes de lundi</span>
+    <button class="btn sm" id="exportBasesBtn" title="Exporter tout le suivi des bases en Excel (une feuille par client)">⬇ Exporter le suivi (Excel)</button>
   </div>`;
   if(!c){$('#view-bases').innerHTML=bar+'<div class="empty-state"><div class="big">▤</div>Créez d\u2019abord un dossier client (vue Portefeuille) ou importez votre fichier de bases.</div>';bindBasesBar();return;}
 
@@ -1326,8 +1340,69 @@ function renderBases(){
 function bindBasesBar(){
   const cs=$('#basesClientSel');if(cs)cs.onchange=()=>{basesClient=cs.value;renderBases();};
   const ys=$('#basesYearSel');if(ys)ys.onchange=()=>{basesYear=+ys.value;renderBases();};
+  const eb=$('#exportBasesBtn');if(eb)eb.onclick=exportBases;
+}
+function exportBases(){
+  const wb=XLSX.utils.book_new();
+  const used={};
+  const sheetName=nm=>{let s=nm.replace(/[:\\\/?*\[\]]/g,' ').slice(0,28)||'Dossier';let n=s,i=2;while(used[n.toLowerCase()]){n=(s.slice(0,25)+' '+i);i++;}used[n.toLowerCase()]=1;return n;};
+  /* Feuille récapitulative des dossiers */
+  const recap=[['DOSSIERS','TYPE DE DOSSIER','Responsable','Interlocuteur','Adresse','Téléphone','Mail']];
+  DB.clients.slice().sort((a,b)=>a.name.localeCompare(b.name,'fr')).forEach(c=>
+    recap.push([c.name,c.type||'',clientResp(c)||'',c.interlocutor||'',c.address||'',c.phone||'',c.email||'']));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(recap),'Liste des dossiers');
+  /* Une feuille par client ayant des journaux */
+  let nClients=0;
+  DB.clients.slice().sort((a,b)=>a.name.localeCompare(b.name,'fr')).forEach(c=>{
+    const tenue=DB.journals.filter(j=>j.client_id===c.id&&j.section==='tenue');
+    const decls=DB.journals.filter(j=>j.client_id===c.id&&j.section==='declaration');
+    if(!tenue.length&&!decls.length)return;
+    nClients++;
+    const weeks=weekDates(tenue);
+    const aoa=[];
+    aoa.push(['SITUATION DE LA TENUE DE COMPTABILITE DE '+c.name.toUpperCase()+'  ·  '+basesYear]);
+    aoa.push([]);
+    aoa.push(['Code journal','Intitulé journal',...MONTHS,...weeks.map(w=>fmtDs(w))]);
+    tenue.forEach(j=>{
+      const row=[j.code,j.label||''];
+      for(let m=1;m<=12;m++)row.push(monthMark(j.id,basesYear,m)?'X':'');
+      weeks.forEach(w=>{const x=countsFor(j.id).find(y=>y.week_date===w);row.push(x?x.count:'');});
+      aoa.push(row);
+    });
+    /* total pièces par semaine */
+    if(tenue.length){
+      const tr=['TOTAL PIÈCES',''];for(let m=0;m<12;m++)tr.push('');
+      weeks.forEach(w=>tr.push(tenue.reduce((a,j)=>{const x=countsFor(j.id).find(y=>y.week_date===w);return a+(x?x.count:0);},0)));
+      aoa.push(tr);
+    }
+    aoa.push([]);
+    aoa.push(['SITUATION DES DECLARATIONS']);
+    aoa.push(['Intitulé journal',...MONTHS]);
+    decls.forEach(j=>{
+      const row=[j.code];
+      for(let m=1;m<=12;m++)row.push(monthMark(j.id,basesYear,m)?'X':'');
+      aoa.push(row);
+    });
+    const ws=XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols']=[{wch:16},{wch:26},...MONTHS.map(()=>({wch:5})),...weeks.map(()=>({wch:9}))];
+    XLSX.utils.book_append_sheet(wb,ws,sheetName(c.name));
+  });
+  if(!nClients){alert('Aucune base à exporter.');return;}
+  XLSX.writeFile(wb,'suivi_des_bases_'+basesYear+'_'+iso(new Date())+'.xlsx');
 }
 function bindBasesGrid(c,weeks){
+  const ro=!canEditClient(c);
+  if(ro){
+    /* Lecture seule : on désactive saisies/cases et on masque les zones d'ajout */
+    $$('#view-bases .cnt-cur input').forEach(i=>i.disabled=true);
+    $$('#view-bases .mcell').forEach(td=>{td.style.cursor='default';td.style.opacity='.85';});
+    $$('#view-bases .addrow, #view-bases #addWeekBtn, #view-bases .jdel').forEach(el=>el&&(el.style.display='none'));
+    const h=$('#view-bases .bt-wrap');
+    if(h&&!$('#roBasesNote')){const n=document.createElement('div');n.id='roBasesNote';n.className='section-note';
+      n.style.cssText='padding:8px 18px;color:var(--orange)';n.textContent='Lecture seule — vous n\u2019êtes pas responsable de ce dossier.';
+      h.parentNode.insertBefore(n,h);}
+    return;
+  }
   /* Croix mensuelles */
   $$('#view-bases .mcell').forEach(td=>td.onclick=async()=>{
     const jid=td.dataset.j,m=+td.dataset.m;
@@ -1626,7 +1701,10 @@ $('#importFile').onchange=async e=>{
         const rows=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:'',raw:true});
         return rows.some(r=>r.some(c=>String(c).toLowerCase().trim().startsWith('code journal')));
       });
-    if(isBases)await importBases(wb,file.name);
+    if(isBases){
+      if(!isAdmin()){alert('L\u2019import du fichier de bases (dossiers, journaux) est réservé à l\u2019administrateur.');return;}
+      await importBases(wb,file.name);
+    }
     else await importTasks(wb,file.name);
   }catch(err){console.error(err);alert("Le fichier n'a pas pu être lu.\nFormats acceptés :\n• Tâches : colonne A = entreprise, colonne B = tâche\n• Bases : classeur avec feuille « BASE DE DONNEES » et une feuille par client.");}
   e.target.value='';
