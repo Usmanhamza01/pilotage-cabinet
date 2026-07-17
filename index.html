@@ -497,10 +497,16 @@ td .t-sub{font-size:12px;color:var(--faint)}
 
 /* ================= CONFIGURATION SUPABASE ================= */
 const CFGKEY='pilotage:cfg';
+/* Config du cabinet intégrée : les collaborateurs n'ont plus qu'à se connecter. */
+const DEFAULT_CFG={
+  url:'https://owiflzgnpyqxnilykkdc.supabase.co',
+  key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im93aWZsemducHlxeG5pbHlra2RjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyNzgwNzQsImV4cCI6MjA5OTg1NDA3NH0.Ny-u0HGui5R4yvLNgBPiEtYaQ7dKA1LAkMEMro_cqgI'
+};
 let memCfg=null;
 function getCfg(){
   if(memCfg)return memCfg;
-  try{const v=localStorage.getItem(CFGKEY);if(v)return memCfg=JSON.parse(v);}catch(e){}
+  try{const v=localStorage.getItem(CFGKEY);if(v){const c=JSON.parse(v);if(c&&c.url&&c.key)return memCfg=c;}}catch(e){}
+  if(DEFAULT_CFG.url&&DEFAULT_CFG.key)return memCfg=DEFAULT_CFG;   /* repli sur la config intégrée */
   return null;
 }
 function setCfg(c){memCfg=c;try{localStorage.setItem(CFGKEY,JSON.stringify(c));}catch(e){}}
@@ -1626,6 +1632,7 @@ async function importBases(wb,fname){
       listName=n;listRows=rows.slice(hIdx+1);break;
     }
   }
+  const listResp={};   /* NOM DOSSIER (liste) -> {resp, profId, type, contact} pour rapprocher les onglets */
   if(listRows){
     for(const r of listRows){
       const name=norm(r[colDoss]);
@@ -1638,11 +1645,23 @@ async function importBases(wb,fname){
       if(colAdr>=0&&norm(r[colAdr]))contact.address=norm(r[colAdr]);
       if(colTel>=0&&norm(r[colTel]))contact.phone=norm(r[colTel]);
       if(colMail>=0&&norm(r[colMail]))contact.email=norm(r[colMail]);
+      listResp[name.toUpperCase()]={resp,profId:prof?prof.id:null,type,contact};
       const before=DB.clients.length;
       await ensureClient(name,{type,responsible_name:resp,...(prof?{responsible_id:prof.id}:{}),...contact});
       if(DB.clients.length>before)nClients++;
     }
   }
+  /* Rapprochement d'un onglet avec un dossier de la liste (exact, puis "contenu dans") */
+  const matchList=tab=>{
+    const up=tab.toUpperCase().trim();
+    if(listResp[up])return listResp[up];
+    /* nom de liste le plus long contenu dans le nom d'onglet (GALIMATECH 2026 -> GALIMATECH) */
+    let best=null,bestLen=0;
+    for(const k in listResp){
+      if((up.includes(k)||k.includes(up))&&k.length>bestLen){best=listResp[k];bestLen=k.length;}
+    }
+    return best;
+  };
   const bdName=listName;
   /* 2) Une feuille par client : tenue + déclarations */
   const monthIdx=h=>{const s=String(h).toLowerCase().slice(0,4);
@@ -1652,7 +1671,8 @@ async function importBases(wb,fname){
     const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:'',raw:true});
     const hIdx=rows.findIndex(r=>String(r[0]).toLowerCase().startsWith('code journal'));
     if(hIdx<0)continue;
-    const client=await ensureClient(sn);
+    const ml=matchList(sn);
+    const client=await ensureClient(sn, ml?{type:ml.type,responsible_name:ml.resp,...(ml.profId?{responsible_id:ml.profId}:{}),...ml.contact}:{});
     const header=rows[hIdx];
     /* colonnes mois et colonnes datées (relevés hebdo) */
     const monthCols={},dateCols=[];
