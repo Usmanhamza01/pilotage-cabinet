@@ -490,7 +490,8 @@ function setCfg(c){memCfg=c;try{localStorage.setItem(CFGKEY,JSON.stringify(c));}
 let sb=null,me=null,rtChannel=null;
 let DB={profiles:[],clients:[],tasks:[],history:[],journals:[],months:[],counts:[]};
 let currentView='dash',editingId=null,scope='me';
-let basesClient='',basesYear=new Date().getFullYear();
+let basesClient='',basesYear=new Date().getFullYear(),basesWeek='';
+let pfQuery='',pfResp='all';
 let filters={q:'',client:'',category:'',assignee:'',priority:'',status:'',due:''};
 
 const CATS=['Client','Interne cabinet','Administratif','Management','Formation','Personnel'];
@@ -789,19 +790,39 @@ function taskTable(list){
 function bindRows(scopeSel){$$(scopeSel+' tr[data-id]').forEach(r=>r.onclick=()=>openModal(r.dataset.id));}
 
 function renderPortfolio(){
-  /* Regroupement par responsable de dossier, puis cartes par client */
-  const respFilter=scope;
   let clients=DB.clients.slice();
-  if(respFilter!=='all'){
-    const uid=respFilter==='me'?me.id:respFilter;
-    const nm=profName(uid).toUpperCase();
+  /* Filtre responsable propre à la vue (prioritaire sur le périmètre global) */
+  if(pfResp==='me'||pfResp==='mine'){
+    clients=clients.filter(c=>c.responsible_id===me.id||(!c.responsible_id&&(c.responsible_name||'').toUpperCase()===me.full_name.toUpperCase()));
+  }else if(pfResp==='none'){
+    clients=clients.filter(c=>!c.responsible_id);
+  }else if(pfResp&&pfResp!=='all'){
+    clients=clients.filter(c=>c.responsible_id===pfResp);
+  }else if(scope!=='all'){
+    /* si aucun filtre local, on respecte le périmètre global (Mes tâches / collaborateur) */
+    const uid=scope==='me'?me.id:scope;const nm=profName(uid).toUpperCase();
     clients=clients.filter(c=>c.responsible_id===uid||(!c.responsible_id&&(c.responsible_name||'').toUpperCase()===nm));
   }
+  /* Recherche par nom de dossier ou interlocuteur */
+  if(pfQuery){
+    const q=pfQuery.toLowerCase();
+    clients=clients.filter(c=>[c.name,c.interlocutor,c.email,c.phone].join(' ').toLowerCase().includes(q));
+  }
+  clients.sort((a,b)=>a.name.localeCompare(b.name,'fr'));
+  const total=DB.clients.length;
+  const respOptions=DB.profiles.map(p=>`<option value="${p.id}" ${pfResp===p.id?'selected':''}>${esc(p.full_name)}</option>`).join('');
   const addBar=`<div class="filters no-print">
+    <div class="search" style="max-width:280px"><input id="pfSearch" placeholder="Rechercher un dossier, interlocuteur…" value="${esc(pfQuery)}"></div>
+    <select id="pfRespSel" title="Filtrer par responsable">
+      <option value="all" ${pfResp==='all'||!pfResp?'selected':''}>Tous les responsables</option>
+      <option value="mine" ${pfResp==='mine'?'selected':''}>👤 Mes dossiers</option>
+      ${respOptions}
+      <option value="none" ${pfResp==='none'?'selected':''}>— Sans responsable —</option>
+    </select>
     <button class="btn primary sm" id="addClientBtn">＋ Nouveau dossier</button>
-    <span class="section-note" style="margin:0">Portefeuille de : <b>${esc(scopeName())}</b> — ${clients.length} dossier(s). Type et responsable modifiables sur chaque carte.</span>
+    <span class="section-note" style="margin:0 0 0 auto">${clients.length} / ${total} dossier(s)</span>
   </div>`;
-  if(!clients.length){$('#view-portfolio').innerHTML=addBar+'<div class="empty-state"><div class="big">🗂</div>Aucun dossier dans ce portefeuille.<br>Importez votre fichier de bases ou créez un dossier.</div>';bindPortfolio();return;}
+  if(!clients.length){$('#view-portfolio').innerHTML=addBar+'<div class="empty-state"><div class="big">🗂</div>Aucun dossier ne correspond.<br>Modifiez la recherche ou le filtre.</div>';bindPortfolio();return;}
   $('#view-portfolio').innerHTML=addBar+`<div class="pf-grid">${clients.map(c=>{
     const ts=DB.tasks.filter(t=>t.client_id===c.id);
     const active=ts.filter(t=>!['done','dropped'].includes(t.status));
@@ -850,6 +871,11 @@ function renderPortfolio(){
   bindPortfolio();
 }
 function bindPortfolio(){
+  const sr=$('#pfSearch');
+  if(sr)sr.oninput=()=>{pfQuery=sr.value;renderPortfolio();
+    const i=$('#pfSearch');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}};
+  const rs=$('#pfRespSel');
+  if(rs)rs.onchange=()=>{pfResp=rs.value;renderPortfolio();};
   $$('#view-portfolio .pf-task').forEach(el=>el.onclick=()=>openModal(el.dataset.id));
   $$('#view-portfolio .pf-add').forEach(b=>b.onclick=()=>{openModal(null);$('#f_client').value=b.dataset.id;});
   $$('#view-portfolio .pf-bases').forEach(b=>b.onclick=()=>{basesClient=b.dataset.id;setView('bases');});
@@ -1085,7 +1111,7 @@ $('#cm_delete').onclick=async()=>{
 };
 /* ================= SUIVI DES BASES ================= */
 function monthMark(jid,year,month){
-  const m=DB.months.find(x=>x.journal_id===jid&&x.year===year&&x.month===month);
+  const m=DB.months.find(x=>x.journal_id===jid&&(+x.year)===(+year)&&(+x.month)===(+month));
   return m?!!m.checked:false;
 }
 function countsFor(jid){return DB.counts.filter(c=>c.journal_id===jid);}
@@ -1100,6 +1126,9 @@ function renderBases(){
   const c=DB.clients.find(x=>x.id===basesClient);
   const cy=new Date().getFullYear();
   const years=[...new Set([cy-1,cy,cy+1,basesYear])].sort();
+  if(!basesWeek)basesWeek=iso(mondayOf(today()));
+  const thisMonday=iso(mondayOf(today()));
+  const isThisWeek=basesWeek===thisMonday;
   const bar=`<div class="bases-bar no-print">
     <select id="basesClientSel">${DB.clients.map(x=>`<option value="${x.id}" ${x.id===basesClient?'selected':''}>${esc(x.name)}</option>`).join('')}</select>
     <select id="basesYearSel">${years.map(y=>`<option ${y===basesYear?'selected':''}>${y}</option>`).join('')}</select>
@@ -1108,15 +1137,17 @@ function renderBases(){
     ${c.interlocutor?`<span class="section-note" style="margin:0">· 👤 ${esc(c.interlocutor)}</span>`:''}
     ${c.phone?`<span class="section-note" style="margin:0">· 📞 ${esc(c.phone)}</span>`:''}`:''}
     <span class="spacer" style="flex:1"></span>
-    <span class="section-note" style="margin:0">Cliquez sur une case mois pour cocher ✕ · saisissez le nombre de pièces du lundi</span>
+    <label style="font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px">Semaine de saisie :
+      <input type="date" id="basesWeekSel" value="${basesWeek}" title="Lundi de la semaine à saisir"></label>
+    ${!isThisWeek?`<button class="btn sm" id="basesWeekNow" title="Revenir à la semaine en cours">Cette semaine</button>`:''}
   </div>`;
   if(!c){$('#view-bases').innerHTML=bar+'<div class="empty-state"><div class="big">▤</div>Créez d\u2019abord un dossier client (vue Portefeuille) ou importez votre fichier de bases.</div>';bindBasesBar();return;}
 
   const tenue=DB.journals.filter(j=>j.client_id===c.id&&j.section==='tenue');
   const decls=DB.journals.filter(j=>j.client_id===c.id&&j.section==='declaration');
-  const curMonday=iso(mondayOf(today()));
+  const curMonday=basesWeek;                         /* semaine active (saisie) */
   const allWeeks=weekDates(tenue);
-  const prevWeeks=allWeeks.filter(w=>w<curMonday).slice(-3);   /* 3 derniers relevés précédents */
+  const prevWeeks=allWeeks.filter(w=>w<curMonday).slice(-3);   /* 3 derniers relevés avant la semaine active */
   const lastPrev=prevWeeks[prevWeeks.length-1]||null;
 
   const monthHead=MONTHS_S.map(m=>`<th>${m}</th>`).join('');
@@ -1190,6 +1221,8 @@ function renderBases(){
 function bindBasesBar(){
   const cs=$('#basesClientSel');if(cs)cs.onchange=()=>{basesClient=cs.value;renderBases();};
   const ys=$('#basesYearSel');if(ys)ys.onchange=()=>{basesYear=+ys.value;renderBases();};
+  const ws=$('#basesWeekSel');if(ws)ws.onchange=()=>{basesWeek=ws.value?iso(mondayOf(new Date(ws.value+'T00:00:00'))):iso(mondayOf(today()));renderBases();};
+  const wn=$('#basesWeekNow');if(wn)wn.onclick=()=>{basesWeek=iso(mondayOf(today()));renderBases();};
 }
 function bindBasesGrid(c){
   /* Croix mensuelles */
@@ -1197,15 +1230,15 @@ function bindBasesGrid(c){
     const jid=td.dataset.j,m=+td.dataset.m;
     const cur=monthMark(jid,basesYear,m);
     const row={journal_id:jid,year:basesYear,month:m,checked:!cur};
-    const ex=DB.months.find(x=>x.journal_id===jid&&x.year===basesYear&&x.month===m);
+    const ex=DB.months.find(x=>x.journal_id===jid&&(+x.year)===(+basesYear)&&(+x.month)===(+m));
     if(ex)ex.checked=!cur;else DB.months.push(row);
     td.classList.toggle('on',!cur);td.textContent=!cur?'✕':'';
     const {error}=await sb.from('journal_months').upsert(row);
     setSync(!error);
   });
-  /* Saisie des pièces du lundi */
+  /* Saisie des pièces de la semaine active */
   $$('#view-bases .cnt-cur input').forEach(inp=>inp.onchange=async()=>{
-    const jid=inp.dataset.j,wk=iso(mondayOf(today()));
+    const jid=inp.dataset.j,wk=basesWeek;
     const val=inp.value===''?null:Math.max(0,parseInt(inp.value)||0);
     if(val===null){
       DB.counts=DB.counts.filter(x=>!(x.journal_id===jid&&x.week_date===wk));
