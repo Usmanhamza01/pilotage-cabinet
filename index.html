@@ -476,6 +476,23 @@ td .t-sub{font-size:12px;color:var(--faint)}
     </div>
   </div>
 </div>
+<!-- Modal édition utilisateur -->
+<div class="overlay" id="userOverlay">
+  <div class="modal" style="max-width:520px">
+    <h2 id="um_title">Modifier l'utilisateur</h2>
+    <div class="fgrid">
+      <div class="fld full"><label>Nom complet</label><input id="um_name"></div>
+      <div class="fld"><label>Nom d'utilisateur (connexion)</label><input id="um_username" disabled style="background:#f4f6fa"></div>
+      <div class="fld"><label>Rôle</label><select id="um_role"><option value="collab">Collaborateur</option><option value="admin">Administrateur</option></select></div>
+    </div>
+    <p class="section-note" id="um_self" style="display:none;margin:12px 0 0;color:var(--orange)">Vous modifiez votre propre compte : le rôle ne peut pas être changé ici.</p>
+    <p class="section-note" style="margin:12px 0 0">Pour changer l'identifiant de connexion ou le mot de passe : Supabase → Authentication → Users → ⋯.</p>
+    <div class="modal-foot">
+      <button class="btn" id="um_cancel">Annuler</button>
+      <button class="btn primary" id="um_save">Enregistrer</button>
+    </div>
+  </div>
+</div>
 <script>
 
 /* ================= CONFIGURATION SUPABASE ================= */
@@ -1414,10 +1431,13 @@ function renderAdmin(){
           <td style="color:var(--muted)">${esc(p.username)}</td>
           <td><span class="badge-role ${p.role==='admin'?'admin':''}">${p.role==='admin'?'Admin':'Collaborateur'}</span></td>
           <td>${DB.clients.filter(c=>c.responsible_id===p.id).length}</td>
-          <td>${p.id!==me.id?`<button class="btn sm roleBtn" data-id="${p.id}" data-role="${p.role==='admin'?'collab':'admin'}">${p.role==='admin'?'Rétrograder':'Promouvoir admin'}</button>`:''}</td>
+          <td style="white-space:nowrap;display:flex;gap:6px;justify-content:flex-end">
+            <button class="btn sm editUserBtn" data-id="${p.id}">✎ Modifier</button>
+            ${p.id!==me.id?`<button class="btn sm roleBtn" data-id="${p.id}" data-role="${p.role==='admin'?'collab':'admin'}">${p.role==='admin'?'Rétrograder':'Promouvoir admin'}</button>`:''}
+          </td>
         </tr>`).join('')}
       </tbody></table></div>
-      <div class="section-note" style="margin-top:10px">Pour réinitialiser un mot de passe : Supabase → Authentication → Users → ⋯ → Reset password.</div>
+      <div class="section-note" style="margin-top:10px">Le nom d'utilisateur (identifiant de connexion) et le mot de passe se modifient depuis Supabase → Authentication → Users → ⋯.</div>
     </div>
     <div class="card"><h3>＋ Créer un compte collaborateur</h3>
       <div class="fgrid" style="max-width:640px">
@@ -1439,6 +1459,7 @@ function renderAdmin(){
     const {error}=await sb.from('profiles').update({role:b.dataset.role}).eq('id',b.dataset.id);
     if(!error){const p=DB.profiles.find(p=>p.id===b.dataset.id);p.role=b.dataset.role;render();}
   });
+  $$('#view-admin .editUserBtn').forEach(b=>b.onclick=()=>openUserModal(b.dataset.id));
   $('#nuBtn').onclick=createUser;
   $('#wipeClientsBtn').onclick=wipeClients;
 }
@@ -1482,6 +1503,37 @@ async function createUser(){
   }
   $('#nuBtn').disabled=false;$('#nuBtn').textContent='Créer le compte';
 }
+let editingUser=null;
+function openUserModal(id){
+  const p=DB.profiles.find(x=>x.id===id);if(!p)return;
+  editingUser=id;
+  $('#um_title').textContent='Modifier — '+p.full_name;
+  $('#um_name').value=p.full_name;
+  $('#um_username').value=p.username;
+  $('#um_role').value=p.role;
+  $('#um_self').style.display=id===me.id?'block':'none';
+  $('#um_role').disabled=(id===me.id);   /* on ne se retire pas soi-même l'admin par mégarde */
+  $('#userOverlay').classList.add('open');
+}
+$('#um_cancel').onclick=()=>$('#userOverlay').classList.remove('open');
+$('#userOverlay').onclick=e=>{if(e.target===$('#userOverlay'))$('#userOverlay').classList.remove('open');};
+$('#um_save').onclick=async()=>{
+  const p=DB.profiles.find(x=>x.id===editingUser);if(!p)return;
+  const name=$('#um_name').value.trim();
+  if(!name){$('#um_name').focus();return;}
+  const patch={full_name:name};
+  if(editingUser!==me.id)patch.role=$('#um_role').value;
+  Object.assign(p,patch);
+  const {error}=await sb.from('profiles').update(patch).eq('id',editingUser);
+  if(error){alert('Modification impossible : '+error.message);setSync(false);return;}
+  /* si le nom change, rattacher d'éventuels dossiers importés portant ce nom */
+  const nm=name.toUpperCase();
+  const orphans=DB.clients.filter(c=>!c.responsible_id&&(c.responsible_name||'').toUpperCase()===nm);
+  for(const c of orphans){await sb.from('clients').update({responsible_id:p.id}).eq('id',c.id);c.responsible_id=p.id;}
+  setSync(true);
+  $('#userOverlay').classList.remove('open');
+  buildScopeSel();render();
+};
 /* ================= IMPORTS EXCEL ================= */
 $('#importXlsBtn').onclick=()=>$('#importFile').click();
 $('#importFile').onchange=async e=>{
