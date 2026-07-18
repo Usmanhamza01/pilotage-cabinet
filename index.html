@@ -451,6 +451,7 @@ td .t-sub{font-size:12px;color:var(--faint)}
       <div class="nav-label">Pilotage</div>
       <button data-view="dash" class="active"><span class="ic">▦</span> Tableau de bord</button>
       <button data-view="team"><span class="ic">👥</span> Équipe (lundi)</button>
+      <button data-view="basecheck" id="navBasecheck" style="display:none"><span class="ic">✅</span> Pointage des bases</button>
       <button data-view="meeting"><span class="ic">🗓</span> Réunion du lundi</button>
       <button data-view="meetings"><span class="ic">📋</span> PV & réunions</button>
       <button data-view="alerts"><span class="ic">🔔</span> Alertes <span class="badge" id="alertCount" style="display:none">0</span></button>
@@ -495,6 +496,7 @@ td .t-sub{font-size:12px;color:var(--faint)}
     <div class="content">
       <div id="view-dash" class="view"></div>
       <div id="view-team" class="view" style="display:none"></div>
+      <div id="view-basecheck" class="view" style="display:none"></div>
       <div id="view-portfolio" class="view" style="display:none"></div>
       <div id="view-tasks" class="view" style="display:none"></div>
       <div id="view-kanban" class="view" style="display:none"></div>
@@ -667,7 +669,7 @@ function getCfg(){
 function setCfg(c){memCfg=c;try{localStorage.setItem(CFGKEY,JSON.stringify(c));}catch(e){}}
 
 let sb=null,me=null,rtChannel=null;
-let DB={profiles:[],clients:[],tasks:[],history:[],journals:[],months:[],counts:[],baseStatus:[],meetings:[],comments:[],notifs:[],chat:[]};
+let DB={profiles:[],clients:[],tasks:[],history:[],journals:[],months:[],counts:[],baseStatus:[],meetings:[],comments:[],notifs:[],chat:[],reads:[]};
 let currentView='dash',editingId=null,scope='me';
 let basesClient='',basesYear=new Date().getFullYear(),basesWeek='';
 let basesExtraWeeks={};           /* clientId -> lundis ajoutés manuellement */
@@ -752,6 +754,7 @@ async function enter(){
   $('#appRoot').style.display='flex';
   $('#meChip').innerHTML=`<b>${esc(me.full_name)}</b>${me.role==='admin'?'Administrateur':'Collaborateur'}`;
   $('#navAdmin').style.display=me.role==='admin'?'flex':'none';
+  $('#navBasecheck').style.display=me.role==='admin'?'flex':'none';
   scope=me.role==='admin'?'all':'me';
   pfResp=me.role==='admin'?'all':'mine';   /* portefeuille : collaborateur = ses dossiers par défaut */
   await loadAll();
@@ -762,7 +765,7 @@ async function enter(){
 function authErr(sel,msg){const e=$(sel);e.textContent=msg;e.style.display='block';}
 async function loadAll(){
   try{
-    const [p,c,t,h,j,m,pc,bs,mt,cm,nt,ch]=await Promise.all([
+    const [p,c,t,h,j,m,pc,bs,mt,cm,nt,ch,cr]=await Promise.all([
       sb.from('profiles').select('*').order('full_name'),
       sb.from('clients').select('*').order('name'),
       sb.from('tasks').select('*').order('num'),
@@ -775,10 +778,11 @@ async function loadAll(){
       sb.from('task_comments').select('*').order('created_at'),
       sb.from('notifications').select('*').order('created_at',{ascending:false}).limit(100),
       sb.from('chat_messages').select('*').order('created_at').limit(500),
+      sb.from('chat_reads').select('*'),
     ]);
-    for(const r of [p,c,t,h,j,m,pc,bs,mt,cm,nt,ch])if(r.error)throw r.error;
+    for(const r of [p,c,t,h,j,m,pc,bs,mt,cm,nt,ch,cr])if(r.error)throw r.error;
     DB={profiles:p.data,clients:c.data,tasks:t.data,history:h.data,journals:j.data,months:m.data,counts:pc.data,
-        baseStatus:bs.data,meetings:mt.data,comments:cm.data,notifs:nt.data,chat:ch.data};
+        baseStatus:bs.data,meetings:mt.data,comments:cm.data,notifs:nt.data,chat:ch.data,reads:cr.data};
     setSync(true);
   }catch(e){console.error(e);setSync(false);}
 }
@@ -786,13 +790,15 @@ let rtTimer=null;
 function startRealtime(){
   if(rtChannel)return;
   rtChannel=sb.channel('sync');
-  ['tasks','piece_counts','journal_months','journals','clients','base_status','meetings','task_comments','notifications','chat_messages'].forEach(tb=>
+  ['tasks','piece_counts','journal_months','journals','clients','base_status','meetings','task_comments','notifications','chat_messages','chat_reads'].forEach(tb=>
     rtChannel.on('postgres_changes',{event:'*',schema:'public',table:tb},()=>{
       clearTimeout(rtTimer);rtTimer=setTimeout(async()=>{
         const onChat=currentView==='chat';const active=document.activeElement===$('#chatInput');
         await loadAll();
-        if(onChat&&active){drawMsgs();const cb=$('#chatBadge');if(cb){const u=chatUnread();cb.style.display=u?'inline-block':'none';cb.textContent=u;}}
-        else render();
+        if(onChat){
+          if(chatChannel!=='ia'&&active)await markRead(chatChannel);
+          renderChat();
+        }else render();
       },700);
     }));
   rtChannel.subscribe();
@@ -858,6 +864,7 @@ async function log(taskId,taskTitle,change){
 /* ================= NAVIGATION ================= */
 const TITLES={dash:['Tableau de bord','Vue synthétique avant réunion'],
   team:['Équipe — point du lundi','Activité de la semaine par collaborateur'],
+  basecheck:['Pointage des bases','Cochez les bases reçues, relancez les manquantes'],
   portfolio:['Portefeuille clients','Dossiers du cabinet regroupés par responsable'],
   tasks:['Tâches','Liste complète, filtres et recherche'],
   kanban:['Vue Kanban','Glissez-déposez les cartes pour changer de statut'],
@@ -955,7 +962,7 @@ function render(){
   const s=stats();ring(s.pct);
   const al=alertsList();
   const ac=$('#alertCount');ac.style.display=al.length?'inline-block':'none';ac.textContent=al.length;
-  ({dash:renderDash,team:renderTeam,portfolio:renderPortfolio,tasks:renderTasks,kanban:renderKanban,bases:renderBases,
+  ({dash:renderDash,team:renderTeam,basecheck:renderBasecheck,portfolio:renderPortfolio,tasks:renderTasks,kanban:renderKanban,bases:renderBases,
     meeting:renderMeeting,meetings:renderMeetings,alerts:renderAlerts,history:renderHistory,admin:renderAdmin,chat:renderChat})[currentView]();
   renderNotifs();
   const cb=$('#chatBadge');if(cb){const u=chatUnread();cb.style.display=u?'inline-block':'none';cb.textContent=u;}
@@ -1413,8 +1420,9 @@ function renderBases(){
     ${c.interlocutor?`<span class="section-note" style="margin:0">· 👤 ${esc(c.interlocutor)}</span>`:''}
     ${c.phone?`<span class="section-note" style="margin:0">· 📞 ${esc(c.phone)}</span>`:''}`:''}
     <span class="spacer" style="flex:1"></span>
-    ${c?`<label style="display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:${baseDone(c.id,iso(mondayOf(today())))?'var(--green)':'var(--muted)'}">
-      <input type="checkbox" id="baseDoneChk" ${baseDone(c.id,iso(mondayOf(today())))?'checked':''} ${canEditClient(c)?'':'disabled'}> Base à jour cette semaine</label>`:''}
+    ${c?(isAdmin()?`<label style="display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:${baseDone(c.id,iso(mondayOf(today())))?'var(--green)':'var(--muted)'}">
+      <input type="checkbox" id="baseDoneChk" ${baseDone(c.id,iso(mondayOf(today())))?'checked':''}> Base reçue cette semaine</label>`
+      :`<span style="font-size:13px;font-weight:600;color:${baseDone(c.id,iso(mondayOf(today())))?'var(--green)':'var(--faint)'}">${baseDone(c.id,iso(mondayOf(today())))?'✓ Base reçue cette semaine':'Base non encore pointée'}</span>`):''}
     <button class="btn sm" id="exportBasesBtn" title="Exporter tout le suivi des bases en Excel (une feuille par client)">⬇ Exporter le suivi (Excel)</button>
   </div>`;
   if(!c){$('#view-bases').innerHTML=bar+'<div class="empty-state"><div class="big">▤</div>Créez d\u2019abord un dossier client (vue Portefeuille) ou importez votre fichier de bases.</div>';bindBasesBar();return;}
@@ -1738,13 +1746,15 @@ function chatMsgs(){
 }
 function renderChat(){
   const others=DB.profiles.filter(p=>p.id!==me.id);
+  const badge=n=>n?`<span style="margin-left:auto;background:var(--red);color:#fff;font-size:11px;font-weight:700;border-radius:99px;padding:0 7px">${n}</span>`:'';
+  const ug=unreadIn('general');
   const side=`<div class="chat-side" id="chatSide">
     <div class="nav-label">Salon</div>
-    <div class="ch-item ${chatChannel==='general'?'active':''}" data-ch="general"><span class="ch-ico">#</span><span class="ch-lbl">Salon commun</span></div>
+    <div class="ch-item ${chatChannel==='general'?'active':''}" data-ch="general"><span class="ch-ico">#</span><span class="ch-lbl">Salon commun</span>${badge(ug)}</div>
     <div class="ch-item ${chatChannel==='ia'?'active':''}" data-ch="ia"><span class="ch-ico ia">✨</span><span class="ch-lbl">Assistant IA</span></div>
     <div class="nav-label">Messages privés</div>
-    ${others.map(p=>`<div class="ch-item ${chatChannel==='dm:'+p.id?'active':''}" data-ch="dm:${p.id}">
-      <span class="ch-ico">${esc((p.full_name[0]||'?').toUpperCase())}</span><span class="ch-lbl">${esc(p.full_name)}</span></div>`).join('')}
+    ${others.map(p=>{const u=unreadIn('dm:'+p.id);return `<div class="ch-item ${chatChannel==='dm:'+p.id?'active':''}" data-ch="dm:${p.id}">
+      <span class="ch-ico">${esc((p.full_name[0]||'?').toUpperCase())}</span><span class="ch-lbl">${esc(p.full_name)}</span>${badge(u)}</div>`;}).join('')}
   </div>`;
   let title='';
   if(chatChannel==='general')title='# Salon commun';
@@ -1759,11 +1769,15 @@ function renderChat(){
     </div>
   </div>`;
   $('#view-chat').innerHTML=`<div class="chat-wrap">${side}${main}</div>`;
-  $$('#view-chat .ch-item').forEach(el=>el.onclick=()=>{chatChannel=el.dataset.ch;renderChat();});
+  if(window._chatDraft){$('#chatInput').value=window._chatDraft;}
+  $$('#view-chat .ch-item').forEach(el=>el.onclick=()=>{window._chatDraft='';chatChannel=el.dataset.ch;renderChat();});
   drawMsgs();
+  $('#chatInput').oninput=e=>{window._chatDraft=e.target.value;};
   $('#chatSend').onclick=sendChat;
   $('#chatInput').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
   $('#chatInput').focus();
+  /* marquer la conversation ouverte comme lue */
+  if(chatChannel!=='ia'){markRead(chatChannel).then(()=>{const cb=$('#chatBadge');if(cb){const u=chatUnread();cb.style.display=u?'inline-block':'none';cb.textContent=u;}});}
 }
 function drawMsgs(){
   const box=$('#chatMsgs');if(!box)return;
@@ -1789,7 +1803,7 @@ function drawMsgs(){
 }
 async function sendChat(){
   const inp=$('#chatInput');const txt=inp.value.trim();if(!txt)return;
-  inp.value='';
+  inp.value='';window._chatDraft='';
   if(chatChannel==='ia'){await askIA(txt);return;}
   const other=chatChannel==='general'?null:chatChannel.slice(3);
   const row={channel:chatChannel==='general'?'general':'dm',sender_id:me.id,sender_name:me.full_name,
@@ -1819,9 +1833,23 @@ async function askIA(question){
   }
   drawMsgs();
 }
+function lastRead(channel){const r=(DB.reads||[]).find(x=>x.channel===channel&&x.user_id===me.id);return r?Date.parse(r.last_read):0;}
+function unreadIn(channel){
+  const lr=lastRead(channel);
+  if(channel==='general')return DB.chat.filter(m=>!m.recipient_id&&m.sender_id!==me.id&&Date.parse(m.created_at)>lr).length;
+  const other=channel.slice(3);
+  return DB.chat.filter(m=>m.sender_id===other&&m.recipient_id===me.id&&Date.parse(m.created_at)>lr).length;
+}
 function chatUnread(){
-  /* messages privés reçus non lus approximés via notifications kind=chat non lues */
-  return (DB.notifs||[]).filter(n=>n.user_id===me.id&&!n.read&&n.kind==='chat').length;
+  let tot=unreadIn('general');
+  DB.profiles.forEach(p=>{if(p.id!==me.id)tot+=unreadIn('dm:'+p.id);});
+  return tot;
+}
+async function markRead(channel){
+  const now=new Date().toISOString();
+  const ex=(DB.reads||[]).find(x=>x.channel===channel&&x.user_id===me.id);
+  if(ex)ex.last_read=now;else DB.reads.push({user_id:me.id,channel,last_read:now});
+  await sb.from('chat_reads').upsert({user_id:me.id,channel,last_read:now});
 }
 
 function renderHistory(){
@@ -1835,6 +1863,66 @@ function renderHistory(){
 
 /* ================= ÉQUIPE (point du lundi) ================= */
 function weekBounds(){const s=mondayOf(today());const e=new Date(s);e.setDate(e.getDate()+7);return[s,e];}
+/* ================= POINTAGE DES BASES (admin) ================= */
+function renderBasecheck(){
+  if(!isAdmin()){$('#view-basecheck').innerHTML='<div class="empty-state">Accès réservé à l\u2019administrateur.</div>';return;}
+  const wk=iso(mondayOf(today()));
+  /* dossiers concernés = tous ceux qui ont une tenue de bases */
+  const dossiers=DB.clients.filter(c=>DB.journals.some(j=>j.client_id===c.id))
+    .sort((a,b)=>a.name.localeCompare(b.name,'fr'));
+  const recu=c=>baseDone(c.id,wk);
+  const nb=dossiers.length,ok=dossiers.filter(recu).length,manque=nb-ok;
+  /* regroupement par responsable pour la lisibilité */
+  const byResp={};
+  dossiers.forEach(c=>{const r=clientResp(c)||'— Sans responsable —';(byResp[r]=byResp[r]||[]).push(c);});
+  const groups=Object.keys(byResp).sort((a,b)=>a.localeCompare(b,'fr'));
+  $('#view-basecheck').innerHTML=`
+    <div class="filters no-print" style="align-items:center">
+      <div style="font-size:14px"><b>Semaine du ${fmtD(wk)}</b> · Reçues <b style="color:var(--green)">${ok}</b> / ${nb} · Manquantes <b style="color:${manque?'var(--orange)':'var(--green)'}">${manque}</b></div>
+      <span class="spacer" style="flex:1"></span>
+      <button class="btn" id="bcAllBtn">Tout cocher</button>
+      <button class="btn" id="bcNoneBtn">Tout décocher</button>
+      <button class="btn primary" id="bcRemindBtn" ${manque?'':'disabled'}>🔔 Envoyer les rappels (${manque})</button>
+    </div>
+    ${groups.map(r=>{
+      const list=byResp[r];const rok=list.filter(recu).length;
+      return `<div class="card" style="padding:14px 16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <b>${esc(r)}</b><span class="section-note" style="margin:0">${rok}/${list.length} reçues</span></div>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          ${list.map(c=>`<label style="display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:8px;${recu(c)?'background:#f0fbf3':''}">
+            <input type="checkbox" class="bc-chk" data-id="${c.id}" ${recu(c)?'checked':''}>
+            <span style="flex:1">${esc(c.name)}</span>
+            <span style="font-size:12px;color:${recu(c)?'var(--green)':'var(--faint)'}">${recu(c)?'✓ reçue':'en attente'}</span>
+          </label>`).join('')}
+        </div></div>`;
+    }).join('')||'<div class="empty-state">Aucun dossier avec suivi de bases.</div>'}`;
+  $$('#view-basecheck .bc-chk').forEach(cb=>cb.onchange=async()=>{await toggleBase(cb.dataset.id,wk);renderBasecheck();});
+  const all=$('#bcAllBtn'),none=$('#bcNoneBtn'),rem=$('#bcRemindBtn');
+  if(all)all.onclick=async()=>{for(const c of dossiers)if(!recu(c))await toggleBase(c.id,wk);renderBasecheck();};
+  if(none)none.onclick=async()=>{for(const c of dossiers)if(recu(c))await toggleBase(c.id,wk);renderBasecheck();};
+  if(rem)rem.onclick=()=>sendBaseReminders(dossiers.filter(c=>!recu(c)),wk);
+}
+async function sendBaseReminders(manquants,wk){
+  if(!manquants.length){alert('Aucune base manquante : tout est à jour.');return;}
+  if(!confirm(`Envoyer un rappel pour ${manquants.length} base(s) manquante(s) ?\nLes responsables concernés et les admins seront notifiés.`))return;
+  const admins=DB.profiles.filter(p=>p.role==='admin').map(p=>p.id);
+  const notifs=[];
+  const sansResp=[];
+  manquants.forEach(c=>{
+    const msg=`Rappel : la base du dossier « ${c.name} » n'a pas encore été reçue (semaine du ${fmtD(wk)}).`;
+    const cibles=new Set(admins);
+    if(c.responsible_id)cibles.add(c.responsible_id);else sansResp.push(c.name);
+    cibles.forEach(uid=>notifs.push({user_id:uid,kind:'base',message:msg,link:'basecheck'}));
+  });
+  const {error}=await sb.from('notifications').insert(notifs);
+  setSync(!error);
+  await loadAll();renderBasecheck();
+  let m=`Rappels envoyés pour ${manquants.length} base(s) manquante(s).`;
+  if(sansResp.length)m+=`\n\nÀ noter : ${sansResp.length} dossier(s) sans responsable (seuls les admins ont été notifiés) : ${sansResp.slice(0,5).join(', ')}${sansResp.length>5?'…':''}`;
+  alert(m);
+}
+
 function renderTeam(){
   const [ws,we]=weekBounds();const wkIso=iso(mondayOf(today()));
   const rows=DB.profiles.map(p=>{
@@ -1969,9 +2057,10 @@ function renderNotifs(){
 }
 async function openNotifs(){
   const mine=(DB.notifs||[]).filter(n=>n.user_id===me.id).slice(0,30);
-  $('#notifList').innerHTML=mine.length?mine.map(n=>`<div class="alert-item ${n.read?'gray':'orange'}">
+  $('#notifList').innerHTML=mine.length?mine.map(n=>`<div class="alert-item ${n.read?'gray':'orange'}" ${n.link?`data-link="${esc(n.link)}" style="cursor:pointer"`:''}>
     <div style="font-size:16px">${n.read?'○':'●'}</div><div><div class="ai-t">${esc(n.message)}</div>
     <div class="ai-d">${fmtTS(n.created_at)}</div></div></div>`).join(''):'<div class="empty-state">Aucune notification.</div>';
+  $$('#notifList [data-link]').forEach(el=>el.onclick=()=>{$('#notifOverlay').classList.remove('open');setView(el.dataset.link);});
   $('#notifOverlay').classList.add('open');
   const unreadIds=mine.filter(n=>!n.read).map(n=>n.id);
   if(unreadIds.length){
