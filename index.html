@@ -416,7 +416,9 @@ td .t-sub{font-size:12px;color:var(--faint)}
     <nav class="nav">
       <div class="nav-label">Pilotage</div>
       <button data-view="dash" class="active"><span class="ic">▦</span> Tableau de bord</button>
+      <button data-view="team"><span class="ic">👥</span> Équipe (lundi)</button>
       <button data-view="meeting"><span class="ic">🗓</span> Réunion du lundi</button>
+      <button data-view="meetings"><span class="ic">📋</span> PV & réunions</button>
       <button data-view="alerts"><span class="ic">🔔</span> Alertes <span class="badge" id="alertCount" style="display:none">0</span></button>
       <div class="nav-label">Travail</div>
       <button data-view="portfolio"><span class="ic">🗂</span> Portefeuille clients</button>
@@ -447,6 +449,7 @@ td .t-sub{font-size:12px;color:var(--faint)}
       <div class="spacer"></div>
       <select id="scopeSel" style="border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:var(--card);font-size:13px" title="Périmètre affiché"></select>
       <span class="sync-badge" title="Synchronisation" style="font-size:12px;color:var(--muted)"><span class="sync-dot" id="syncDot"></span><span id="syncLbl">Synchronisé</span></span>
+      <button class="btn" id="notifBell" title="Notifications" style="position:relative">🔔<span class="nb-count" style="display:none;position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;font-size:10px;font-weight:700;border-radius:99px;padding:0 5px">0</span></button>
       <button class="btn" id="importXlsBtn" title="Importer tâches (entreprise|tâche) ou fichier de bases (Classeur)">⬆<span class="btn-tx"> Importer</span></button>
       <input type="file" id="importFile" accept=".xlsx,.xls" style="display:none">
       <button class="btn" id="exportXlsBtn" title="Exporter toutes les tâches en Excel">⬇<span class="btn-tx"> Excel</span></button>
@@ -456,11 +459,13 @@ td .t-sub{font-size:12px;color:var(--faint)}
 
     <div class="content">
       <div id="view-dash" class="view"></div>
+      <div id="view-team" class="view" style="display:none"></div>
       <div id="view-portfolio" class="view" style="display:none"></div>
       <div id="view-tasks" class="view" style="display:none"></div>
       <div id="view-kanban" class="view" style="display:none"></div>
       <div id="view-bases" class="view" style="display:none"></div>
       <div id="view-meeting" class="view" style="display:none"></div>
+      <div id="view-meetings" class="view" style="display:none"></div>
       <div id="view-alerts" class="view" style="display:none"></div>
       <div id="view-history" class="view" style="display:none"></div>
       <div id="view-admin" class="view" style="display:none"></div>
@@ -484,6 +489,15 @@ td .t-sub{font-size:12px;color:var(--faint)}
       </div>
       <div class="fld"><label>Responsable</label><select id="f_assignee"><option value="">— Non assigné —</option></select></div>
       <div class="fld"><label>Durée estimée</label><input id="f_duration" placeholder="Ex : 3 h, 2 jours"></div>
+      <div class="fld"><label>Récurrence</label>
+        <select id="f_recurrence">
+          <option value="none">Aucune (tâche unique)</option>
+          <option value="weekly">Chaque semaine</option>
+          <option value="monthly">Chaque mois</option>
+          <option value="quarterly">Chaque trimestre</option>
+          <option value="yearly">Chaque année</option>
+        </select>
+      </div>
       <div class="fld"><label>Date de début prévue</label><input type="date" id="f_start"></div>
       <div class="fld"><label>Date limite</label><input type="date" id="f_due"></div>
       <div class="fld"><label>Priorité</label>
@@ -516,6 +530,7 @@ td .t-sub{font-size:12px;color:var(--faint)}
       <div class="fld"><label>Prochaine action à réaliser</label><input id="f_nextAction"></div>
       <div class="fld full"><label>Commentaires / notes / difficultés</label><textarea id="f_comments"></textarea></div>
     </div>
+    <div id="taskComments" style="margin-top:6px"></div>
     <div class="modal-foot">
       <span id="taskIdLbl" style="margin-right:auto;color:var(--faint);font-size:12px"></span>
       <button class="btn danger" id="deleteTaskBtn" style="display:none">Supprimer</button>
@@ -543,6 +558,40 @@ td .t-sub{font-size:12px;color:var(--faint)}
     </div>
   </div>
 </div>
+<!-- Modal réunion / PV -->
+<div class="overlay" id="meetingOverlay">
+  <div class="modal" style="max-width:820px">
+    <h2 id="mtTitle">Nouveau PV</h2>
+    <div class="fgrid">
+      <div class="fld"><label>N° de PV</label><input type="number" id="mtNum"></div>
+      <div class="fld"><label>Date</label><input type="date" id="mtDate"></div>
+      <div class="fld"><label>Heure de début</label><input id="mtStart" placeholder="08:30"></div>
+      <div class="fld"><label>Heure de fin</label><input id="mtEnd" placeholder="10:00"></div>
+    </div>
+    <div class="fld" style="margin-top:12px"><label>Présence</label>
+      <div id="mtAtt" style="border:1px solid var(--line);border-radius:8px;padding:8px 12px;max-height:170px;overflow:auto"></div>
+    </div>
+    <div class="fld" style="margin-top:12px"><label>Corps du procès-verbal (pré-rempli d'après la semaine — modifiable)</label>
+      <textarea id="mtBody" style="min-height:220px"></textarea>
+    </div>
+    <div class="modal-foot">
+      <button class="btn danger" id="mtDelete" style="margin-right:auto;display:none">Supprimer</button>
+      <button class="btn" id="mtCancel">Annuler</button>
+      <button class="btn" id="mtWord">⬇ Word</button>
+      <button class="btn primary" id="mtSave">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Panneau notifications -->
+<div class="overlay" id="notifOverlay">
+  <div class="modal" style="max-width:460px">
+    <h2>🔔 Notifications</h2>
+    <div id="notifList" style="max-height:60vh;overflow:auto"></div>
+    <div class="modal-foot"><button class="btn" id="notifClose">Fermer</button></div>
+  </div>
+</div>
+
 <!-- Modal édition utilisateur -->
 <div class="overlay" id="userOverlay">
   <div class="modal" style="max-width:520px">
@@ -579,7 +628,7 @@ function getCfg(){
 function setCfg(c){memCfg=c;try{localStorage.setItem(CFGKEY,JSON.stringify(c));}catch(e){}}
 
 let sb=null,me=null,rtChannel=null;
-let DB={profiles:[],clients:[],tasks:[],history:[],journals:[],months:[],counts:[]};
+let DB={profiles:[],clients:[],tasks:[],history:[],journals:[],months:[],counts:[],baseStatus:[],meetings:[],comments:[],notifs:[]};
 let currentView='dash',editingId=null,scope='me';
 let basesClient='',basesYear=new Date().getFullYear(),basesWeek='';
 let basesExtraWeeks={};           /* clientId -> lundis ajoutés manuellement */
@@ -624,6 +673,27 @@ const isAdmin=()=>me&&me.role==='admin';
 const clientRespId=cid=>{const c=DB.clients.find(x=>x.id===cid);return c?c.responsible_id:null;};
 const canEditClient=c=>isAdmin()||(c&&c.responsible_id===me.id);
 const canEditTask=t=>isAdmin()||t.assignee_id===me.id||(t.client_id&&clientRespId(t.client_id)===me.id);
+/* Décale une date ISO selon la récurrence */
+function shiftDate(isoStr,rec){
+  const d=new Date((isoStr||iso(today()))+'T00:00:00');
+  if(rec==='weekly')d.setDate(d.getDate()+7);
+  else if(rec==='monthly')d.setMonth(d.getMonth()+1);
+  else if(rec==='quarterly')d.setMonth(d.getMonth()+3);
+  else if(rec==='yearly')d.setFullYear(d.getFullYear()+1);
+  return iso(d);
+}
+/* Crée la prochaine occurrence d'une tâche récurrente terminée */
+async function spawnRecurrence(t,vals){
+  const rec=(vals.recurrence!==undefined?vals.recurrence:t.recurrence)||'none';
+  if(rec==='none')return;
+  const base=t.due_date||t.start_date||iso(today());
+  const next={title:t.title,description:t.description,client_id:t.client_id,category:t.category,
+    assignee_id:t.assignee_id,est_duration:t.est_duration,recurrence:rec,
+    start_date:t.start_date?shiftDate(t.start_date,rec):null,due_date:shiftDate(base,rec),
+    priority:t.priority,status:'todo',progress:0,next_action:t.next_action,created_by:me.id};
+  const {data,error}=await sb.from('tasks').insert(next).select().single();
+  if(!error&&data){DB.tasks.push(data);log(data.id,data.title,`Nouvelle occurrence (récurrence ${rec}) créée automatiquement`);}
+}
 const setSync=ok=>{$('#syncDot').classList.toggle('off',!ok);$('#syncLbl').textContent=ok?'Synchronisé':'Hors ligne';};
 
 /* ================= AUTH & CHARGEMENT ================= */
@@ -653,7 +723,7 @@ async function enter(){
 function authErr(sel,msg){const e=$(sel);e.textContent=msg;e.style.display='block';}
 async function loadAll(){
   try{
-    const [p,c,t,h,j,m,pc]=await Promise.all([
+    const [p,c,t,h,j,m,pc,bs,mt,cm,nt]=await Promise.all([
       sb.from('profiles').select('*').order('full_name'),
       sb.from('clients').select('*').order('name'),
       sb.from('tasks').select('*').order('num'),
@@ -661,9 +731,14 @@ async function loadAll(){
       sb.from('journals').select('*').order('position').order('code'),
       sb.from('journal_months').select('*'),
       sb.from('piece_counts').select('*').order('week_date'),
+      sb.from('base_status').select('*'),
+      sb.from('meetings').select('*').order('meeting_date',{ascending:false}),
+      sb.from('task_comments').select('*').order('created_at'),
+      sb.from('notifications').select('*').order('created_at',{ascending:false}).limit(100),
     ]);
-    for(const r of [p,c,t,h,j,m,pc])if(r.error)throw r.error;
-    DB={profiles:p.data,clients:c.data,tasks:t.data,history:h.data,journals:j.data,months:m.data,counts:pc.data};
+    for(const r of [p,c,t,h,j,m,pc,bs,mt,cm,nt])if(r.error)throw r.error;
+    DB={profiles:p.data,clients:c.data,tasks:t.data,history:h.data,journals:j.data,months:m.data,counts:pc.data,
+        baseStatus:bs.data,meetings:mt.data,comments:cm.data,notifs:nt.data};
     setSync(true);
   }catch(e){console.error(e);setSync(false);}
 }
@@ -671,7 +746,7 @@ let rtTimer=null;
 function startRealtime(){
   if(rtChannel)return;
   rtChannel=sb.channel('sync');
-  ['tasks','piece_counts','journal_months','journals','clients'].forEach(tb=>
+  ['tasks','piece_counts','journal_months','journals','clients','base_status','meetings','task_comments','notifications'].forEach(tb=>
     rtChannel.on('postgres_changes',{event:'*',schema:'public',table:tb},()=>{
       clearTimeout(rtTimer);rtTimer=setTimeout(async()=>{await loadAll();render();},700);
     }));
@@ -737,11 +812,13 @@ async function log(taskId,taskTitle,change){
 }
 /* ================= NAVIGATION ================= */
 const TITLES={dash:['Tableau de bord','Vue synthétique avant réunion'],
+  team:['Équipe — point du lundi','Activité de la semaine par collaborateur'],
   portfolio:['Portefeuille clients','Dossiers du cabinet regroupés par responsable'],
   tasks:['Tâches','Liste complète, filtres et recherche'],
   kanban:['Vue Kanban','Glissez-déposez les cartes pour changer de statut'],
   bases:['Suivi des bases','Tenue comptable, déclarations et pièces hebdomadaires'],
   meeting:['Réunion du lundi','Rapport hebdomadaire généré automatiquement'],
+  meetings:['PV & réunions','Rédaction, présence et archive des procès-verbaux'],
   alerts:['Alertes & rappels','Échéances proches, retards et tâches à mettre à jour'],
   history:['Historique','Traçabilité complète des modifications'],
   admin:['Utilisateurs','Gestion des comptes collaborateurs']};
@@ -832,8 +909,9 @@ function render(){
   const s=stats();ring(s.pct);
   const al=alertsList();
   const ac=$('#alertCount');ac.style.display=al.length?'inline-block':'none';ac.textContent=al.length;
-  ({dash:renderDash,portfolio:renderPortfolio,tasks:renderTasks,kanban:renderKanban,bases:renderBases,
-    meeting:renderMeeting,alerts:renderAlerts,history:renderHistory,admin:renderAdmin})[currentView]();
+  ({dash:renderDash,team:renderTeam,portfolio:renderPortfolio,tasks:renderTasks,kanban:renderKanban,bases:renderBases,
+    meeting:renderMeeting,meetings:renderMeetings,alerts:renderAlerts,history:renderHistory,admin:renderAdmin})[currentView]();
+  renderNotifs();
 }
 const kpi=(l,v,cls)=>`<div class="kpi ${cls}"><div class="kpi-lbl">${l}</div><div class="kpi-num">${v}</div></div>`;
 
@@ -1108,6 +1186,7 @@ function openModal(id){
   $('#f_client').value=t?.client_id||'';$('#f_category').value=t?.category||'Client';
   $('#f_assignee').value=t?t.assignee_id||'':me.id;
   $('#f_duration').value=t?.est_duration||'';
+  $('#f_recurrence').value=t?.recurrence||'none';
   $('#f_start').value=t?.start_date||'';$('#f_due').value=t?.due_date||'';
   $('#f_priority').value=t?.priority||'p3';$('#f_status').value=t?.status||'todo';
   $('#f_progress').value=t?.progress||0;$('#f_progressVal').textContent=$('#f_progress').value+'%';
@@ -1117,13 +1196,44 @@ function openModal(id){
   toggleBlockFields();
   /* Lecture seule si tâche existante non modifiable par ce collaborateur */
   const ro=t?!canEditTask(t):false;
-  const F=['f_title','f_desc','f_client','f_category','f_assignee','f_duration','f_start','f_due','f_priority','f_status','f_progress','f_lastAction','f_nextAction','f_comments','f_blockCause','f_blockAction','f_blockPerson'];
+  const F=['f_title','f_desc','f_client','f_category','f_assignee','f_duration','f_recurrence','f_start','f_due','f_priority','f_status','f_progress','f_lastAction','f_nextAction','f_comments','f_blockCause','f_blockAction','f_blockPerson'];
   F.forEach(id=>{const el=$('#'+id);if(el)el.disabled=ro;});
   $('#modalTitle').textContent=t?(ro?'Fiche tâche (lecture seule)':'Fiche tâche'):'Nouvelle tâche';
   $('#saveTaskBtn').style.display=ro?'none':'inline-flex';
   $('#deleteTaskBtn').style.display=(t&&!ro)?'inline-flex':'none';
   $('#taskOverlay').classList.add('open');
+  renderTaskComments(id);
   if(!ro)setTimeout(()=>$('#f_title').focus(),50);
+}
+function renderTaskComments(taskId){
+  const box=$('#taskComments');
+  if(!taskId){box.innerHTML='';return;}
+  const cs=(DB.comments||[]).filter(c=>c.task_id===taskId);
+  box.innerHTML=`<div style="border-top:1px solid var(--line);padding-top:12px">
+    <label style="font-size:12px;font-weight:600;color:var(--muted)">Fil de discussion (${cs.length})</label>
+    <div style="max-height:150px;overflow:auto;margin:6px 0">
+      ${cs.length?cs.map(c=>`<div style="padding:6px 0;border-bottom:1px solid #eef1f6;font-size:13px">
+        <b>${esc(c.author_name)}</b> <span style="color:var(--faint);font-size:11px">${fmtTS(c.created_at)}</span>
+        ${c.author_id===me.id?`<button class="btn sm cmt-del" data-id="${c.id}" style="float:right;padding:0 6px">✕</button>`:''}
+        <div>${esc(c.body)}</div></div>`).join(''):'<div style="color:var(--faint);font-size:12.5px;font-style:italic">Aucun commentaire.</div>'}
+    </div>
+    <div style="display:flex;gap:8px">
+      <input id="cmtInput" placeholder="Ajouter un commentaire…" style="flex:1;border:1px solid var(--line);border-radius:8px;padding:8px 11px">
+      <button class="btn sm primary" id="cmtSend">Envoyer</button>
+    </div></div>`;
+  $('#cmtSend').onclick=async()=>{
+    const body=$('#cmtInput').value.trim();if(!body)return;
+    const row={task_id:taskId,author_id:me.id,author_name:me.full_name,body};
+    const {data,error}=await sb.from('task_comments').insert(row).select().single();
+    if(!error&&data){DB.comments.push(data);renderTaskComments(taskId);}
+    setSync(!error);
+  };
+  $('#cmtInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('#cmtSend').click();});
+  $$('#taskComments .cmt-del').forEach(b=>b.onclick=async()=>{
+    DB.comments=DB.comments.filter(c=>c.id!=b.dataset.id);
+    await sb.from('task_comments').delete().eq('id',b.dataset.id);
+    renderTaskComments(taskId);
+  });
 }
 function toggleBlockFields(){$('#blockFields').classList.toggle('show',$('#f_status').value==='blocked');}
 $('#f_status').onchange=toggleBlockFields;
@@ -1135,7 +1245,7 @@ $('#saveTaskBtn').onclick=async()=>{
   const title=$('#f_title').value.trim();
   if(!title){$('#f_title').focus();$('#f_title').style.borderColor='var(--red)';return;}
   const vals={title,description:$('#f_desc').value.trim(),client_id:$('#f_client').value||null,category:$('#f_category').value,
-    assignee_id:$('#f_assignee').value||null,est_duration:$('#f_duration').value.trim(),
+    assignee_id:$('#f_assignee').value||null,est_duration:$('#f_duration').value.trim(),recurrence:$('#f_recurrence').value,
     start_date:$('#f_start').value||null,due_date:$('#f_due').value||null,
     priority:$('#f_priority').value,status:$('#f_status').value,progress:+$('#f_progress').value,
     last_action:$('#f_lastAction').value.trim(),next_action:$('#f_nextAction').value.trim(),comments:$('#f_comments').value.trim(),
@@ -1156,7 +1266,7 @@ $('#saveTaskBtn').onclick=async()=>{
         changes.push(`${FIELD_LBL[k]||k} : "${o||'—'}" → "${n||'—'}"`);
       }
     }
-    if(vals.status==='done'&&t.status!=='done')vals.completed_at=new Date().toISOString();
+    if(vals.status==='done'&&t.status!=='done'){vals.completed_at=new Date().toISOString();await spawnRecurrence(t,vals);}
     if(vals.status!=='done'&&t.status==='done')vals.completed_at=null;
     if(changes.length){
       vals.updated_at=new Date().toISOString();
@@ -1256,6 +1366,8 @@ function renderBases(){
     ${c.interlocutor?`<span class="section-note" style="margin:0">· 👤 ${esc(c.interlocutor)}</span>`:''}
     ${c.phone?`<span class="section-note" style="margin:0">· 📞 ${esc(c.phone)}</span>`:''}`:''}
     <span class="spacer" style="flex:1"></span>
+    ${c?`<label style="display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:${baseDone(c.id,iso(mondayOf(today())))?'var(--green)':'var(--muted)'}">
+      <input type="checkbox" id="baseDoneChk" ${baseDone(c.id,iso(mondayOf(today())))?'checked':''} ${canEditClient(c)?'':'disabled'}> Base à jour cette semaine</label>`:''}
     <button class="btn sm" id="exportBasesBtn" title="Exporter tout le suivi des bases en Excel (une feuille par client)">⬇ Exporter le suivi (Excel)</button>
   </div>`;
   if(!c){$('#view-bases').innerHTML=bar+'<div class="empty-state"><div class="big">▤</div>Créez d\u2019abord un dossier client (vue Portefeuille) ou importez votre fichier de bases.</div>';bindBasesBar();return;}
@@ -1341,6 +1453,8 @@ function bindBasesBar(){
   const cs=$('#basesClientSel');if(cs)cs.onchange=()=>{basesClient=cs.value;renderBases();};
   const ys=$('#basesYearSel');if(ys)ys.onchange=()=>{basesYear=+ys.value;renderBases();};
   const eb=$('#exportBasesBtn');if(eb)eb.onclick=exportBases;
+  const bchk=$('#baseDoneChk');
+  if(bchk)bchk.onchange=async()=>{await toggleBase(basesClient,iso(mondayOf(today())));renderBases();};
 }
 function exportBases(){
   const wb=XLSX.utils.book_new();
@@ -1574,6 +1688,191 @@ function renderHistory(){
       ${esc(h.change)}<br><span class="hist-user">Utilisateur : ${esc(h.user_name)}</span></div></div>`).join('')
     :'<div class="empty-state">Aucune modification enregistrée pour le moment.</div>'}</div>`;
 }
+
+/* ================= ÉQUIPE (point du lundi) ================= */
+function weekBounds(){const s=mondayOf(today());const e=new Date(s);e.setDate(e.getDate()+7);return[s,e];}
+function renderTeam(){
+  const [ws,we]=weekBounds();const wkIso=iso(mondayOf(today()));
+  const rows=DB.profiles.map(p=>{
+    const mine=DB.tasks.filter(t=>t.assignee_id===p.id);
+    const dossiers=DB.clients.filter(c=>c.responsible_id===p.id);
+    const doneW=mine.filter(t=>t.status==='done'&&t.completed_at&&Date.parse(t.completed_at)>=ws.getTime()&&Date.parse(t.completed_at)<we.getTime()).length;
+    const doing=mine.filter(t=>['doing','waiting'].includes(t.status)).length;
+    const late=mine.filter(isLate).length;
+    const blocked=mine.filter(t=>t.status==='blocked').length;
+    /* bases à jour cette semaine parmi ses dossiers ayant des journaux */
+    const basesDoss=dossiers.filter(c=>DB.journals.some(j=>j.client_id===c.id));
+    const basesOk=basesDoss.filter(c=>DB.baseStatus.some(b=>b.client_id===c.id&&b.week_date===wkIso&&b.done)).length;
+    return{p,dossiers:dossiers.length,doneW,doing,late,blocked,basesDoss:basesDoss.length,basesOk};
+  });
+  $('#view-team').innerHTML=`
+    <div class="section-note">Semaine du ${fmtD(iso(ws))} — activité par collaborateur. Cliquez un nom pour voir son périmètre.</div>
+    <div class="pf-grid">${rows.map(r=>`
+      <div class="card pf-card">
+        <div class="pf-head"><h3 style="margin:0">👤 ${esc(r.p.full_name)}</h3>
+          <button class="btn sm team-see" data-id="${r.p.id}">Voir</button></div>
+        <div class="pf-resp">${r.p.role==='admin'?'<span class="badge-role admin">Admin</span>':'<span class="badge-role">Collaborateur</span>'} · ${r.dossiers} dossier(s)</div>
+        <div class="grid-kpi" style="grid-template-columns:repeat(2,1fr);gap:8px;margin:10px 0 0">
+          ${kpi('Terminées (sem.)',r.doneW,'good')}${kpi('En cours',r.doing,'blue')}
+          ${kpi('En retard',r.late,r.late?'alert':'')}${kpi('Bloquées',r.blocked,r.blocked?'alert':'')}
+        </div>
+        ${r.basesDoss?`<div style="margin-top:10px;font-size:12.5px;color:var(--muted)">Bases à jour cette semaine : <b style="color:${r.basesOk===r.basesDoss?'var(--green)':'var(--orange)'}">${r.basesOk}/${r.basesDoss}</b></div>`:''}
+      </div>`).join('')}</div>`;
+  $$('#view-team .team-see').forEach(b=>b.onclick=()=>{scope=b.dataset.id;$('#scopeSel').value=scope;setView('dash');});
+}
+
+/* ================= SUIVI "BASE À JOUR" (dans la vue bases) ================= */
+function baseDone(cid,wk){return DB.baseStatus.some(b=>b.client_id===cid&&b.week_date===wk&&b.done);}
+async function toggleBase(cid,wk){
+  const cur=baseDone(cid,wk);
+  if(cur){
+    DB.baseStatus=DB.baseStatus.filter(b=>!(b.client_id===cid&&b.week_date===wk));
+    const {error}=await sb.from('base_status').delete().eq('client_id',cid).eq('week_date',wk);setSync(!error);
+  }else{
+    const row={client_id:cid,week_date:wk,done:true,updated_by:me.id,updated_at:new Date().toISOString()};
+    DB.baseStatus.push(row);
+    const {error}=await sb.from('base_status').upsert(row);setSync(!error);
+  }
+}
+
+/* ================= PV & RÉUNIONS ================= */
+let editingMeeting=null;
+function renderMeetings(){
+  const admin=isAdmin();
+  const list=DB.meetings.slice().sort((a,b)=>(a.meeting_date<b.meeting_date?1:-1));
+  $('#view-meetings').innerHTML=`
+    ${admin?`<div class="filters no-print"><button class="btn primary" id="newMeetingBtn">＋ Nouveau PV (pré-rempli)</button>
+      <span class="section-note" style="margin:0">Le PV reprend automatiquement l'activité de la semaine ; complétez, puis exportez en Word.</span></div>`:''}
+    ${list.length?list.map(mt=>`
+      <div class="card" style="cursor:pointer" data-mid="${mt.id}">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <div><b>PV N°${mt.number||'—'} · ${fmtD(mt.meeting_date)}</b>
+            <div class="t-sub">${(mt.attendees||[]).filter(a=>a.present).length} présent(s) · ${mt.start_time||'—'} → ${mt.end_time||'—'}</div></div>
+          <div style="display:flex;gap:6px">
+            <button class="btn sm mt-word" data-mid="${mt.id}">⬇ Word</button>
+            <button class="btn sm mt-pres" data-mid="${mt.id}">Présence</button>
+            ${admin?`<button class="btn sm mt-edit" data-mid="${mt.id}">Modifier</button>`:''}
+          </div>
+        </div>
+      </div>`).join(''):'<div class="empty-state"><div class="big">📋</div>Aucun PV enregistré.</div>'}`;
+  if(admin){const b=$('#newMeetingBtn');if(b)b.onclick=()=>openMeeting(null);}
+  $$('#view-meetings .mt-edit').forEach(b=>b.onclick=e=>{e.stopPropagation();openMeeting(b.dataset.mid);});
+  $$('#view-meetings .mt-word').forEach(b=>b.onclick=e=>{e.stopPropagation();exportMeetingWord(b.dataset.mid);});
+  $$('#view-meetings .mt-pres').forEach(b=>b.onclick=e=>{e.stopPropagation();exportPresence(b.dataset.mid);});
+  $$('#view-meetings [data-mid]').forEach(c=>{if(c.classList.contains('card'))c.onclick=()=>{if(isAdmin())openMeeting(c.dataset.mid);};});
+}
+function nextPvNumber(){return (DB.meetings.reduce((m,x)=>Math.max(m,x.number||0),0))+1;}
+function autoBody(){
+  /* Génère un brouillon de corps de PV à partir de l'activité de la semaine */
+  const [ws,we]=weekBounds();
+  const done=DB.tasks.filter(t=>t.status==='done'&&t.completed_at&&Date.parse(t.completed_at)>=ws.getTime()&&Date.parse(t.completed_at)<we.getTime());
+  const blocked=DB.tasks.filter(t=>t.status==='blocked');
+  const doing=DB.tasks.filter(t=>['doing','waiting'].includes(t.status));
+  let L=[];
+  L.push('Points abordés :');
+  done.forEach(t=>L.push(`- ${clientName(t.client_id)||'Interne'} : ${t.title} — réalisé (${profName(t.assignee_id)||'—'}).`));
+  doing.forEach(t=>L.push(`- ${clientName(t.client_id)||'Interne'} : ${t.title} — en cours, avancement ${t.progress}% (${profName(t.assignee_id)||'—'}).`));
+  blocked.forEach(t=>L.push(`- ${clientName(t.client_id)||'Interne'} : ${t.title} — bloqué : ${t.block_cause||'à préciser'} (attendu : ${t.block_person||'—'}).`));
+  L.push('');L.push('Plus aucun point n\u2019ayant été abordé, la séance a été levée.');
+  return L.join('\n');
+}
+function openMeeting(id){
+  if(!isAdmin())return;
+  const mt=id?DB.meetings.find(x=>x.id===id):null;editingMeeting=id||null;
+  const attendees=mt?mt.attendees:DB.profiles.map(p=>({name:p.full_name,role:p.role==='admin'?'Administrateur':'Collaborateur',present:true}));
+  $('#mtNum').value=mt?mt.number||'':nextPvNumber();
+  $('#mtDate').value=mt?mt.meeting_date:iso(today());
+  $('#mtStart').value=mt?mt.start_time||'':'08:30';
+  $('#mtEnd').value=mt?mt.end_time||'':'';
+  $('#mtBody').value=mt?mt.body||'':autoBody();
+  $('#mtAtt').innerHTML=attendees.map((a,i)=>`<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px">
+    <input type="checkbox" data-i="${i}" ${a.present?'checked':''}> ${esc(a.name)} <span style="color:var(--faint)">— ${esc(a.role||'')}</span></label>`).join('');
+  $('#mtAtt').dataset.att=JSON.stringify(attendees);
+  $('#mtTitle').textContent=mt?`PV N°${mt.number||''}`:'Nouveau PV';
+  $('#mtDelete').style.display=mt?'inline-flex':'none';
+  $('#meetingOverlay').classList.add('open');
+}
+$('#mtCancel')&&($('#mtCancel').onclick=()=>$('#meetingOverlay').classList.remove('open'));
+async function saveMeeting(){
+  const att=JSON.parse($('#mtAtt').dataset.att||'[]');
+  $$('#mtAtt input[type=checkbox]').forEach(cb=>{att[+cb.dataset.i].present=cb.checked;});
+  const row={number:+$('#mtNum').value||null,meeting_date:$('#mtDate').value,start_time:$('#mtStart').value,
+    end_time:$('#mtEnd').value,attendees:att,body:$('#mtBody').value};
+  if(editingMeeting){
+    Object.assign(DB.meetings.find(x=>x.id===editingMeeting),row);
+    const {error}=await sb.from('meetings').update(row).eq('id',editingMeeting);setSync(!error);
+  }else{
+    row.created_by=me.id;
+    const {data,error}=await sb.from('meetings').insert(row).select().single();
+    if(!error&&data)DB.meetings.unshift(data);setSync(!error);
+  }
+  $('#meetingOverlay').classList.remove('open');render();
+}
+async function deleteMeeting(){
+  if(!editingMeeting)return;
+  if(!confirm('Supprimer ce PV ?'))return;
+  DB.meetings=DB.meetings.filter(x=>x.id!==editingMeeting);
+  const {error}=await sb.from('meetings').delete().eq('id',editingMeeting);setSync(!error);
+  $('#meetingOverlay').classList.remove('open');render();
+}
+
+/* ================= NOTIFICATIONS ================= */
+function renderNotifs(){
+  const bell=$('#notifBell');if(!bell)return;
+  const unread=(DB.notifs||[]).filter(n=>n.user_id===me.id&&!n.read).length;
+  bell.querySelector('.nb-count').textContent=unread;
+  bell.querySelector('.nb-count').style.display=unread?'inline-block':'none';
+}
+async function openNotifs(){
+  const mine=(DB.notifs||[]).filter(n=>n.user_id===me.id).slice(0,30);
+  $('#notifList').innerHTML=mine.length?mine.map(n=>`<div class="alert-item ${n.read?'gray':'orange'}">
+    <div style="font-size:16px">${n.read?'○':'●'}</div><div><div class="ai-t">${esc(n.message)}</div>
+    <div class="ai-d">${fmtTS(n.created_at)}</div></div></div>`).join(''):'<div class="empty-state">Aucune notification.</div>';
+  $('#notifOverlay').classList.add('open');
+  const unreadIds=mine.filter(n=>!n.read).map(n=>n.id);
+  if(unreadIds.length){
+    mine.forEach(n=>n.read=true);
+    await sb.from('notifications').update({read:true}).in('id',unreadIds);renderNotifs();
+  }
+}
+
+/* ---- Export Word (.doc via HTML) ---- */
+function downloadDoc(filename,htmlBody){
+  const html=`<html xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8">
+    <style>body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.4}
+    h1{font-size:14pt;text-align:center} table{border-collapse:collapse;width:100%}
+    td,th{border:1px solid #000;padding:5px 7px;font-size:11pt} .c{text-align:center}</style></head>
+    <body>${htmlBody}</body></html>`;
+  const blob=new Blob(['\ufeff'+html],{type:'application/msword'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+function frDate(d){return new Date(d+'T00:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});}
+function exportMeetingWord(id){
+  const mt=DB.meetings.find(x=>x.id===id);if(!mt)return;
+  const present=(mt.attendees||[]).filter(a=>a.present);
+  const body=`
+    <h1>PROCÈS VERBAL N°${String(mt.number||'').padStart(2,'0')} DU ${new Date(mt.meeting_date+'T00:00:00').toLocaleDateString('fr-FR')}</h1>
+    <p>Heure de début : ${esc(mt.start_time||'—')}<br>Heure de fin : ${esc(mt.end_time||'—')}</p>
+    <p><b>Étaient présent(e)s à l'heure :</b></p>
+    <p>${present.map(a=>esc(a.name)+' ;').join('<br>')}</p>
+    <p>L'an deux mille vingt-six, le ${frDate(mt.meeting_date)}, le personnel administratif et opérationnel du Cabinet Mor DIENG CMD-Sarl Audit & Conseils s'est réuni.</p>
+    <p>${esc(mt.body||'').split('\n').map(l=>l.trim()).filter(Boolean).map(esc=>esc).join('<br>')}</p>
+    <p>Fait à Dakar, le ${frDate(mt.meeting_date)}</p>`;
+  downloadDoc('PV_reunion_'+mt.meeting_date+'.doc',body);
+}
+function exportPresence(id){
+  const mt=DB.meetings.find(x=>x.id===id);if(!mt)return;
+  const att=(mt.attendees||[]);
+  const rows=att.map(a=>`<tr><td>${esc(a.name)}</td><td>${esc(a.role||'')}</td><td></td><td></td></tr>`).join('');
+  const body=`
+    <h1>FEUILLE DE PRESENCE</h1>
+    <p>Date : ${new Date(mt.meeting_date+'T00:00:00').toLocaleDateString('fr-FR')}</p>
+    <table><tr><th>Nom(s) et prénom(s)</th><th>Fonction</th><th>Tél</th><th>Signature</th></tr>${rows}</table>
+    <p style="margin-top:24px;font-size:9pt;text-align:center">Cabinet Mor DIENG — Expertise comptable · Audit · Conseils</p>`;
+  downloadDoc('Feuille_presence_'+mt.meeting_date+'.doc',body);
+}
+
 function renderAdmin(){
   if(me.role!=='admin'){$('#view-admin').innerHTML='<div class="empty-state">Accès réservé à l\u2019administrateur.</div>';return;}
   $('#view-admin').innerHTML=`
@@ -1948,6 +2247,13 @@ function mdToHtml(md){
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 }
+$('#notifBell')&&($('#notifBell').onclick=openNotifs);
+$('#notifClose')&&($('#notifClose').onclick=()=>$('#notifOverlay').classList.remove('open'));
+$('#notifOverlay')&&($('#notifOverlay').onclick=e=>{if(e.target===$('#notifOverlay'))$('#notifOverlay').classList.remove('open');});
+$('#mtSave')&&($('#mtSave').onclick=saveMeeting);
+$('#mtDelete')&&($('#mtDelete').onclick=deleteMeeting);
+$('#mtWord')&&($('#mtWord').onclick=()=>{if(editingMeeting)exportMeetingWord(editingMeeting);else alert('Enregistrez d\u2019abord le PV.');});
+$('#meetingOverlay')&&($('#meetingOverlay').onclick=e=>{if(e.target===$('#meetingOverlay'))$('#meetingOverlay').classList.remove('open');});
 boot();
 </script>
 </body>
