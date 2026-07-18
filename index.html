@@ -65,6 +65,38 @@ input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink)}
 .ring-wrap{display:flex;align-items:center;gap:10px;margin-top:12px}
 .nav-scrim{display:none;position:fixed;inset:0;background:rgba(10,20,50,.4);z-index:150}
 .nav-scrim.show{display:block}
+/* ===== Chat ===== */
+.chat-wrap{display:grid;grid-template-columns:220px 1fr;gap:0;height:calc(100vh - 150px);min-height:420px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
+.chat-side{border-right:1px solid var(--line);overflow-y:auto;background:#f9fafc}
+.chat-side .ch-item{display:flex;align-items:center;gap:9px;padding:11px 14px;cursor:pointer;font-size:13.5px;border-bottom:1px solid #eef1f6}
+.chat-side .ch-item:hover{background:var(--blue-soft)}
+.chat-side .ch-item.active{background:var(--blue-soft);border-left:3px solid var(--blue);font-weight:600}
+.chat-side .ch-ico{width:30px;height:30px;border-radius:99px;background:var(--blue-deep);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.chat-side .ch-ico.ia{background:linear-gradient(135deg,#6941c6,#1d4fd8)}
+.chat-side .ch-lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-side .nav-label{padding:12px 14px 5px}
+.chat-main{display:flex;flex-direction:column;min-width:0}
+.chat-head{padding:12px 16px;border-bottom:1px solid var(--line);font-weight:600;display:flex;align-items:center;gap:8px}
+.chat-msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:9px;background:#fbfcfe}
+.msg{max-width:74%;padding:8px 12px;border-radius:12px;font-size:13.5px;line-height:1.4;position:relative}
+.msg .mh{font-size:11px;font-weight:600;margin-bottom:2px;color:var(--blue-deep)}
+.msg .mt{font-size:10px;color:var(--faint);margin-top:3px;text-align:right}
+.msg.them{background:#fff;border:1px solid var(--line);align-self:flex-start;border-bottom-left-radius:3px}
+.msg.me{background:var(--blue);color:#fff;align-self:flex-end;border-bottom-right-radius:3px}
+.msg.me .mh,.msg.me .mt{color:#dbe6ff}
+.msg.ia{background:#f0ebfb;border:1px solid #d9d3f2;align-self:flex-start}
+.msg .mdel{position:absolute;top:2px;right:6px;cursor:pointer;opacity:0;font-size:12px}
+.msg:hover .mdel{opacity:.6}
+.chat-input{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line);background:var(--card)}
+.chat-input input{flex:1;border:1px solid var(--line);border-radius:20px;padding:9px 14px;font-size:14px}
+.chat-input button{border-radius:20px}
+.chat-mob-tabs{display:none}
+@media(max-width:640px){
+  .chat-wrap{grid-template-columns:1fr;height:calc(100vh - 170px)}
+  .chat-side{display:none}
+  .chat-side.mobopen{display:block;position:absolute;inset:0;z-index:5}
+  .chat-mob-tabs{display:flex;gap:8px;padding:8px}
+}
 .ring-wrap .lbl{color:#9db0dd;font-size:11.5px;line-height:1.3}
 .ring-wrap .val{color:#fff;font-weight:600;font-size:14px;font-family:'Sora'}
 
@@ -427,6 +459,7 @@ td .t-sub{font-size:12px;color:var(--faint)}
       <button data-view="tasks"><span class="ic">☰</span> Tâches</button>
       <button data-view="kanban"><span class="ic">▥</span> Kanban</button>
       <button data-view="bases"><span class="ic">▤</span> Suivi des bases</button>
+      <button data-view="chat"><span class="ic">💬</span> Chat <span class="badge" id="chatBadge" style="display:none">0</span></button>
       <div class="nav-label">Suivi</div>
       <button data-view="history"><span class="ic">🕘</span> Historique</button>
       <button data-view="admin" id="navAdmin" style="display:none"><span class="ic">👥</span> Utilisateurs</button>
@@ -466,6 +499,7 @@ td .t-sub{font-size:12px;color:var(--faint)}
       <div id="view-tasks" class="view" style="display:none"></div>
       <div id="view-kanban" class="view" style="display:none"></div>
       <div id="view-bases" class="view" style="display:none"></div>
+      <div id="view-chat" class="view" style="display:none"></div>
       <div id="view-meeting" class="view" style="display:none"></div>
       <div id="view-meetings" class="view" style="display:none"></div>
       <div id="view-alerts" class="view" style="display:none"></div>
@@ -633,7 +667,7 @@ function getCfg(){
 function setCfg(c){memCfg=c;try{localStorage.setItem(CFGKEY,JSON.stringify(c));}catch(e){}}
 
 let sb=null,me=null,rtChannel=null;
-let DB={profiles:[],clients:[],tasks:[],history:[],journals:[],months:[],counts:[],baseStatus:[],meetings:[],comments:[],notifs:[]};
+let DB={profiles:[],clients:[],tasks:[],history:[],journals:[],months:[],counts:[],baseStatus:[],meetings:[],comments:[],notifs:[],chat:[]};
 let currentView='dash',editingId=null,scope='me';
 let basesClient='',basesYear=new Date().getFullYear(),basesWeek='';
 let basesExtraWeeks={};           /* clientId -> lundis ajoutés manuellement */
@@ -728,7 +762,7 @@ async function enter(){
 function authErr(sel,msg){const e=$(sel);e.textContent=msg;e.style.display='block';}
 async function loadAll(){
   try{
-    const [p,c,t,h,j,m,pc,bs,mt,cm,nt]=await Promise.all([
+    const [p,c,t,h,j,m,pc,bs,mt,cm,nt,ch]=await Promise.all([
       sb.from('profiles').select('*').order('full_name'),
       sb.from('clients').select('*').order('name'),
       sb.from('tasks').select('*').order('num'),
@@ -740,10 +774,11 @@ async function loadAll(){
       sb.from('meetings').select('*').order('meeting_date',{ascending:false}),
       sb.from('task_comments').select('*').order('created_at'),
       sb.from('notifications').select('*').order('created_at',{ascending:false}).limit(100),
+      sb.from('chat_messages').select('*').order('created_at').limit(500),
     ]);
-    for(const r of [p,c,t,h,j,m,pc,bs,mt,cm,nt])if(r.error)throw r.error;
+    for(const r of [p,c,t,h,j,m,pc,bs,mt,cm,nt,ch])if(r.error)throw r.error;
     DB={profiles:p.data,clients:c.data,tasks:t.data,history:h.data,journals:j.data,months:m.data,counts:pc.data,
-        baseStatus:bs.data,meetings:mt.data,comments:cm.data,notifs:nt.data};
+        baseStatus:bs.data,meetings:mt.data,comments:cm.data,notifs:nt.data,chat:ch.data};
     setSync(true);
   }catch(e){console.error(e);setSync(false);}
 }
@@ -751,9 +786,14 @@ let rtTimer=null;
 function startRealtime(){
   if(rtChannel)return;
   rtChannel=sb.channel('sync');
-  ['tasks','piece_counts','journal_months','journals','clients','base_status','meetings','task_comments','notifications'].forEach(tb=>
+  ['tasks','piece_counts','journal_months','journals','clients','base_status','meetings','task_comments','notifications','chat_messages'].forEach(tb=>
     rtChannel.on('postgres_changes',{event:'*',schema:'public',table:tb},()=>{
-      clearTimeout(rtTimer);rtTimer=setTimeout(async()=>{await loadAll();render();},700);
+      clearTimeout(rtTimer);rtTimer=setTimeout(async()=>{
+        const onChat=currentView==='chat';const active=document.activeElement===$('#chatInput');
+        await loadAll();
+        if(onChat&&active){drawMsgs();const cb=$('#chatBadge');if(cb){const u=chatUnread();cb.style.display=u?'inline-block':'none';cb.textContent=u;}}
+        else render();
+      },700);
     }));
   rtChannel.subscribe();
 }
@@ -822,6 +862,7 @@ const TITLES={dash:['Tableau de bord','Vue synthétique avant réunion'],
   tasks:['Tâches','Liste complète, filtres et recherche'],
   kanban:['Vue Kanban','Glissez-déposez les cartes pour changer de statut'],
   bases:['Suivi des bases','Tenue comptable, déclarations et pièces hebdomadaires'],
+  chat:['Chat du cabinet','Salon commun, messages privés et assistant IA'],
   meeting:['Réunion du lundi','Rapport hebdomadaire généré automatiquement'],
   meetings:['PV & réunions','Rédaction, présence et archive des procès-verbaux'],
   alerts:['Alertes & rappels','Échéances proches, retards et tâches à mettre à jour'],
@@ -915,8 +956,9 @@ function render(){
   const al=alertsList();
   const ac=$('#alertCount');ac.style.display=al.length?'inline-block':'none';ac.textContent=al.length;
   ({dash:renderDash,team:renderTeam,portfolio:renderPortfolio,tasks:renderTasks,kanban:renderKanban,bases:renderBases,
-    meeting:renderMeeting,meetings:renderMeetings,alerts:renderAlerts,history:renderHistory,admin:renderAdmin})[currentView]();
+    meeting:renderMeeting,meetings:renderMeetings,alerts:renderAlerts,history:renderHistory,admin:renderAdmin,chat:renderChat})[currentView]();
   renderNotifs();
+  const cb=$('#chatBadge');if(cb){const u=chatUnread();cb.style.display=u?'inline-block':'none';cb.textContent=u;}
 }
 const kpi=(l,v,cls)=>`<div class="kpi ${cls}"><div class="kpi-lbl">${l}</div><div class="kpi-num">${v}</div></div>`;
 
@@ -1685,6 +1727,103 @@ function renderAlerts(){
   :'<div class="empty-state"><div class="big">✅</div>Aucune alerte. Toutes les tâches sont à jour.</div>');
   $$('#view-alerts .alert-item').forEach(el=>el.onclick=()=>openModal(el.dataset.id));
 }
+/* ================= CHAT ================= */
+let chatChannel='general';   /* 'general', 'ia', ou 'dm:<idAutre>' */
+function chatMsgs(){
+  if(chatChannel==='ia')return (window._iaThread||[]);
+  if(chatChannel==='general')return DB.chat.filter(m=>!m.recipient_id).sort((x,y)=>x.created_at<y.created_at?-1:1);
+  const other=chatChannel.slice(3);   /* dm:<idAutre> */
+  return DB.chat.filter(m=>m.recipient_id&&((m.sender_id===me.id&&m.recipient_id===other)||(m.sender_id===other&&m.recipient_id===me.id)))
+    .sort((x,y)=>x.created_at<y.created_at?-1:1);
+}
+function renderChat(){
+  const others=DB.profiles.filter(p=>p.id!==me.id);
+  const side=`<div class="chat-side" id="chatSide">
+    <div class="nav-label">Salon</div>
+    <div class="ch-item ${chatChannel==='general'?'active':''}" data-ch="general"><span class="ch-ico">#</span><span class="ch-lbl">Salon commun</span></div>
+    <div class="ch-item ${chatChannel==='ia'?'active':''}" data-ch="ia"><span class="ch-ico ia">✨</span><span class="ch-lbl">Assistant IA</span></div>
+    <div class="nav-label">Messages privés</div>
+    ${others.map(p=>`<div class="ch-item ${chatChannel==='dm:'+p.id?'active':''}" data-ch="dm:${p.id}">
+      <span class="ch-ico">${esc((p.full_name[0]||'?').toUpperCase())}</span><span class="ch-lbl">${esc(p.full_name)}</span></div>`).join('')}
+  </div>`;
+  let title='';
+  if(chatChannel==='general')title='# Salon commun';
+  else if(chatChannel==='ia')title='✨ Assistant IA';
+  else{const o=DB.profiles.find(p=>p.id===chatChannel.slice(3));title='👤 '+(o?esc(o.full_name):'—');}
+  const main=`<div class="chat-main">
+    <div class="chat-head"><button class="btn sm chat-back" style="display:none">☰</button>${title}</div>
+    <div class="chat-msgs" id="chatMsgs"></div>
+    <div class="chat-input">
+      <input id="chatInput" placeholder="${chatChannel==='ia'?'Posez une question à l\u2019assistant…':'Écrire un message…'}">
+      <button class="btn primary" id="chatSend">Envoyer</button>
+    </div>
+  </div>`;
+  $('#view-chat').innerHTML=`<div class="chat-wrap">${side}${main}</div>`;
+  $$('#view-chat .ch-item').forEach(el=>el.onclick=()=>{chatChannel=el.dataset.ch;renderChat();});
+  drawMsgs();
+  $('#chatSend').onclick=sendChat;
+  $('#chatInput').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
+  $('#chatInput').focus();
+}
+function drawMsgs(){
+  const box=$('#chatMsgs');if(!box)return;
+  const msgs=chatMsgs();
+  if(chatChannel==='ia'){
+    box.innerHTML=msgs.length?msgs.map(m=>`<div class="msg ${m.role==='user'?'me':'ia'}">
+      ${m.role!=='user'?'<div class="mh">✨ Assistant</div>':''}<div>${esc(m.content).replace(/\n/g,'<br>')}</div></div>`).join('')
+      :'<div style="color:var(--faint);text-align:center;margin:auto;font-size:13px">Posez une question : résumé de la semaine, aide à la rédaction d\u2019un mail, explication d\u2019un point comptable…</div>';
+  }else{
+    box.innerHTML=msgs.length?msgs.map(m=>{
+      const mine=m.sender_id===me.id;
+      return `<div class="msg ${mine?'me':'them'}">${!mine?`<div class="mh">${esc(m.sender_name)}</div>`:''}
+        ${mine?`<span class="mdel" data-id="${m.id}">✕</span>`:''}
+        <div>${esc(m.body).replace(/\n/g,'<br>')}</div>
+        <div class="mt">${new Date(m.created_at).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</div></div>`;
+    }).join(''):'<div style="color:var(--faint);text-align:center;margin:auto;font-size:13px">Aucun message. Lancez la conversation !</div>';
+  }
+  box.scrollTop=box.scrollHeight;
+  $$('#chatMsgs .mdel').forEach(b=>b.onclick=async()=>{
+    DB.chat=DB.chat.filter(m=>m.id!=b.dataset.id);
+    await sb.from('chat_messages').delete().eq('id',b.dataset.id);drawMsgs();
+  });
+}
+async function sendChat(){
+  const inp=$('#chatInput');const txt=inp.value.trim();if(!txt)return;
+  inp.value='';
+  if(chatChannel==='ia'){await askIA(txt);return;}
+  const other=chatChannel==='general'?null:chatChannel.slice(3);
+  const row={channel:chatChannel==='general'?'general':'dm',sender_id:me.id,sender_name:me.full_name,
+    recipient_id:other,body:txt};
+  const {data,error}=await sb.from('chat_messages').insert(row).select().single();
+  if(!error&&data){DB.chat.push(data);drawMsgs();
+    /* notifier le destinataire d'un message privé */
+    if(row.recipient_id){sb.from('notifications').insert({user_id:row.recipient_id,kind:'chat',
+      message:`Message de ${me.full_name} : ${txt.slice(0,60)}`});}
+  }
+  setSync(!error);
+}
+async function askIA(question){
+  window._iaThread=window._iaThread||[];
+  window._iaThread.push({role:'user',content:question});drawMsgs();
+  window._iaThread.push({role:'assistant',content:'…'});drawMsgs();
+  try{
+    const ctx=`Tu es l'assistant du Cabinet Mor DIENG (expertise comptable, Dakar). Aide à la rédaction, aux résumés et aux questions comptables/organisationnelles, en français, de façon concise et professionnelle.`;
+    const msgs=window._iaThread.filter(m=>m.content!=='…').map(m=>({role:m.role,content:m.content}));
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,system:ctx,messages:msgs})});
+    const d=await r.json();
+    const txt=(d.content||[]).map(c=>c.text||'').join('\n')||'(réponse vide)';
+    window._iaThread[window._iaThread.length-1]={role:'assistant',content:txt};
+  }catch(e){
+    window._iaThread[window._iaThread.length-1]={role:'assistant',content:'L\u2019assistant IA n\u2019est disponible que dans l\u2019environnement Claude pour le moment.'};
+  }
+  drawMsgs();
+}
+function chatUnread(){
+  /* messages privés reçus non lus approximés via notifications kind=chat non lues */
+  return (DB.notifs||[]).filter(n=>n.user_id===me.id&&!n.read&&n.kind==='chat').length;
+}
+
 function renderHistory(){
   $('#view-history').innerHTML=`<div class="card">${
     DB.history.length?DB.history.map(h=>`
