@@ -1,6 +1,6 @@
 /* Service worker — stratégie network-first avec repli sur le cache.
    skipWaiting + clients.claim : les mises à jour sont prises en compte immédiatement. */
-const CACHE = 'pilotage-cabinet-v1';
+const CACHE = 'pilotage-cabinet-v2';
 const ASSETS = ['./index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {

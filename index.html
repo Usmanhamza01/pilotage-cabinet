@@ -14,6 +14,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/index.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 
 :root{
@@ -1865,26 +1867,77 @@ function downloadDoc(filename,htmlBody){
 function frDate(d){return new Date(d+'T00:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});}
 function exportMeetingWord(id){
   const mt=DB.meetings.find(x=>x.id===id);if(!mt)return;
+  if(typeof docx==='undefined'){alert('Bibliothèque Word en cours de chargement, réessayez dans un instant.');return;}
   const present=(mt.attendees||[]).filter(a=>a.present);
-  const body=`
-    <h1>PROCÈS VERBAL N°${String(mt.number||'').padStart(2,'0')} DU ${new Date(mt.meeting_date+'T00:00:00').toLocaleDateString('fr-FR')}</h1>
-    <p>Heure de début : ${esc(mt.start_time||'—')}<br>Heure de fin : ${esc(mt.end_time||'—')}</p>
-    <p><b>Étaient présent(e)s à l'heure :</b></p>
-    <p>${present.map(a=>esc(a.name)+' ;').join('<br>')}</p>
-    <p>L'an deux mille vingt-six, le ${frDate(mt.meeting_date)}, le personnel administratif et opérationnel du Cabinet Mor DIENG CMD-Sarl Audit & Conseils s'est réuni.</p>
-    <p>${esc(mt.body||'').split('\n').map(l=>l.trim()).filter(Boolean).map(esc=>esc).join('<br>')}</p>
-    <p>Fait à Dakar, le ${frDate(mt.meeting_date)}</p>`;
-  downloadDoc('PV_reunion_'+mt.meeting_date+'.doc',body);
+  const {Document,Packer,Paragraph,TextRun,ImageRun,AlignmentType,BorderStyle}=docx;
+  const logoBytes=b64ToBytes(CMD_LOGO.split(',')[1]);
+  const P=(txt,opt={})=>new Paragraph({children:[new TextRun({text:txt,...opt})],spacing:{after:120},...(opt.align?{alignment:opt.align}:{})});
+  const bodyLines=(mt.body||'').split('\n').map(l=>l.trim()).filter(Boolean);
+  const children=[
+    new Paragraph({alignment:AlignmentType.CENTER,children:[new ImageRun({data:logoBytes,transformation:{width:150,height:70}})]}),
+    new Paragraph({alignment:AlignmentType.CENTER,spacing:{after:60},children:[new TextRun({text:CABINET.activite,italics:true,size:15,color:'1560BD'})]}),
+    new Paragraph({spacing:{after:200},border:{bottom:{color:'1560BD',space:1,style:BorderStyle.SINGLE,size:12}},children:[]}),
+    new Paragraph({alignment:AlignmentType.CENTER,spacing:{after:200},children:[new TextRun({text:`PROCÈS VERBAL N°${String(mt.number||'').padStart(2,'0')} DU ${new Date(mt.meeting_date+'T00:00:00').toLocaleDateString('fr-FR')}`,bold:true,size:28})]}),
+    P('Heure de début : '+(mt.start_time||'—')),
+    P('Heure de fin : '+(mt.end_time||'—')),
+    P('Étaient présent(e)s à l\u2019heure :',{bold:true}),
+    ...present.map(a=>P(a.name+' ;')),
+    P(`L'an deux mille vingt-six, le ${frDate(mt.meeting_date)}, le personnel administratif et opérationnel du Cabinet Mor DIENG CMD-Sarl Audit & Conseils s'est réuni.`),
+    ...bodyLines.map(l=>P(l)),
+    P('Fait à Dakar, le '+frDate(mt.meeting_date)),
+    new Paragraph({spacing:{before:240},border:{top:{color:'1560BD',space:1,style:BorderStyle.SINGLE,size:8}},children:[]}),
+    new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:CABINET.adresse,size:13})]}),
+    new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:CABINET.contact,size:13})]}),
+    new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:CABINET.legal,size:13})]}),
+  ];
+  const doc=new Document({sections:[{properties:{},children}]});
+  Packer.toBlob(doc).then(blob=>{
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='PV_reunion_'+mt.meeting_date+'.docx';a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  });
 }
+function b64ToBytes(b64){const bin=atob(b64);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);return arr;}
 function exportPresence(id){
   const mt=DB.meetings.find(x=>x.id===id);if(!mt)return;
+  if(!window.jspdf){alert('Bibliothèque PDF en cours de chargement, réessayez dans un instant.');return;}
   const att=(mt.attendees||[]);
-  const rows=att.map(a=>`<tr><td>${esc(a.name)}</td><td>${esc(a.role||'')}</td><td></td><td></td></tr>`).join('');
-  const body=`
-    <h1>FEUILLE DE PRESENCE</h1>
-    <p>Date : ${new Date(mt.meeting_date+'T00:00:00').toLocaleDateString('fr-FR')}</p>
-    <table><tr><th>Nom(s) et prénom(s)</th><th>Fonction</th><th>Tél</th><th>Signature</th></tr>${rows}</table>`;
-  downloadDoc('Feuille_presence_'+mt.meeting_date+'.doc',body);
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:'mm',format:'a4'});
+  const W=210,M=15;let y=14;
+  /* Logo */
+  try{doc.addImage(CMD_LOGO,'PNG',M,y,44,20);}catch(e){}
+  doc.setFontSize(7.5);doc.setTextColor(21,96,189);
+  doc.text(CABINET.activite,W-M,y+8,{align:'right',maxWidth:120});
+  y+=24;
+  doc.setDrawColor(21,96,189);doc.setLineWidth(0.6);doc.line(M,y,W-M,y);y+=10;
+  /* Titre */
+  doc.setTextColor(0,0,0);doc.setFontSize(14);doc.setFont(undefined,'bold');
+  doc.text('FEUILLE DE PRESENCE',W/2,y,{align:'center'});y+=9;
+  doc.setFontSize(11);doc.setFont(undefined,'normal');
+  doc.text('Date : '+new Date(mt.meeting_date+'T00:00:00').toLocaleDateString('fr-FR'),M,y);y+=6;
+  /* Tableau */
+  const cols=[M,M+70,M+130,M+160,W-M];const rowH=14;
+  const head=['Nom(s) et prénom(s)','Fonction','Tél','Signature'];
+  doc.setFillColor(235,240,250);doc.setDrawColor(120,120,120);doc.setLineWidth(0.2);
+  doc.rect(M,y,W-2*M,9,'FD');doc.setFont(undefined,'bold');doc.setFontSize(9);
+  head.forEach((h,i)=>doc.text(h,cols[i]+2,y+6));
+  y+=9;doc.setFont(undefined,'normal');
+  att.forEach(a=>{
+    if(y+rowH>270){doc.addPage();y=20;}
+    doc.rect(M,y,W-2*M,rowH);
+    for(let i=1;i<cols.length;i++)doc.line(cols[i],y,cols[i],y+rowH);
+    doc.setFontSize(9);
+    doc.text(doc.splitTextToSize(a.name||'',66),cols[0]+2,y+6);
+    doc.text(doc.splitTextToSize(a.role||'',56),cols[1]+2,y+6);
+    y+=rowH;
+  });
+  /* Pied */
+  y=282;doc.setDrawColor(21,96,189);doc.line(M,y,W-M,y);y+=4;
+  doc.setFontSize(6.5);doc.setTextColor(60,60,60);
+  doc.text(CABINET.adresse,W/2,y,{align:'center',maxWidth:180});y+=3;
+  doc.text(CABINET.contact,W/2,y,{align:'center'});y+=3;
+  doc.text(CABINET.legal,W/2,y,{align:'center',maxWidth:180});
+  doc.save('Feuille_presence_'+mt.meeting_date+'.pdf');
 }
 
 function renderAdmin(){
