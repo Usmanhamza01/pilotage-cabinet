@@ -63,6 +63,7 @@ input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink)}
 .sidebar-foot label{display:block;color:#8fa2d4;font-size:11px;margin-bottom:4px}
 .sidebar-foot input{width:100%;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.15);border-radius:7px;color:#fff;padding:6px 9px;font-size:13px}
 .ring-wrap{display:flex;align-items:center;gap:10px;margin-top:12px}
+.pf-selected{outline:2px solid var(--blue);outline-offset:-1px;background:var(--blue-soft)}
 .nav-scrim{display:none;position:fixed;inset:0;background:rgba(10,20,50,.4);z-index:150}
 .nav-scrim.show{display:block}
 /* ===== Chat ===== */
@@ -486,6 +487,7 @@ td .t-sub{font-size:12px;color:var(--faint)}
       <select id="scopeSel" style="border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:var(--card);font-size:13px" title="Périmètre affiché"></select>
       <span class="sync-badge" title="Synchronisation" style="font-size:12px;color:var(--muted)"><span class="sync-dot" id="syncDot"></span><span id="syncLbl">Synchronisé</span></span>
       <button class="btn" id="installBtn" title="Installer l'application sur cet appareil" style="display:none">⬇ Installer l'appli</button>
+      <button class="btn" id="profileBtn" title="Mon compte">👤</button>
       <button class="btn" id="notifBell" title="Notifications" style="position:relative">🔔<span class="nb-count" style="display:none;position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;font-size:10px;font-weight:700;border-radius:99px;padding:0 5px">0</span></button>
       <button class="btn" id="importXlsBtn" title="Importer tâches (entreprise|tâche) ou fichier de bases (Classeur)">⬆<span class="btn-tx"> Importer</span></button>
       <input type="file" id="importFile" accept=".xlsx,.xls" style="display:none">
@@ -597,6 +599,23 @@ td .t-sub{font-size:12px;color:var(--faint)}
     </div>
   </div>
 </div>
+<!-- Modal profil / mot de passe -->
+<div class="overlay" id="profileOverlay">
+  <div class="modal" style="max-width:440px">
+    <h2>👤 Mon compte</h2>
+    <div id="profInfo" class="section-note" style="margin:0 0 16px"></div>
+    <div class="fld full"><label>Nouveau mot de passe (8 caractères min.)</label><input type="password" id="pwNew" placeholder="••••••••"></div>
+    <div class="fld full" style="margin-top:10px"><label>Confirmer le mot de passe</label><input type="password" id="pwConfirm" placeholder="••••••••"></div>
+    <div class="auth-err" id="pwErr" style="display:none"></div>
+    <div class="auth-ok" id="pwOk" style="display:none;color:var(--green);font-size:13px;margin-top:8px"></div>
+    <div class="modal-foot">
+      <button class="btn danger" id="logoutBtn" style="margin-right:auto">Se déconnecter</button>
+      <button class="btn" id="profCancel">Fermer</button>
+      <button class="btn primary" id="pwSave">Changer le mot de passe</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal réunion / PV -->
 <div class="overlay" id="meetingOverlay">
   <div class="modal" style="max-width:820px">
@@ -676,6 +695,7 @@ let basesClient='',basesYear=new Date().getFullYear(),basesWeek='';
 let basesExtraWeeks={};           /* clientId -> lundis ajoutés manuellement */
 const WEEK_WINDOW=8;              /* nombre max de colonnes-semaine affichées */
 let pfQuery='',pfResp='all';
+let pfSelMode=false,pfSel=new Set();
 let filters={q:'',client:'',category:'',assignee:'',priority:'',status:'',due:''};
 
 const CATS=['Client','Interne cabinet','Administratif','Management','Formation','Personnel'];
@@ -1058,8 +1078,22 @@ function renderPortfolio(){
       <option value="none" ${pfResp==='none'?'selected':''}>— Sans responsable —</option>
     </select>
     <button class="btn primary sm" id="addClientBtn">＋ Nouveau dossier</button>
+    <button class="btn sm" id="pfSelectBtn">${pfSelMode?'✕ Annuler la sélection':'☑ Sélectionner'}</button>
     <span class="section-note" style="margin:0 0 0 auto">${clients.length} / ${total} dossier(s)</span>
-  </div>`;
+  </div>
+  ${pfSelMode?`<div class="filters no-print" style="background:var(--blue-soft);border-radius:10px;padding:10px 14px">
+    <b style="font-size:13px">${pfSel.size} sélectionné(s)</b>
+    <button class="btn sm" id="pfSelAll">Tout sélectionner (${clients.length})</button>
+    <button class="btn sm" id="pfSelClear">Vider</button>
+    <span class="spacer" style="flex:1"></span>
+    <button class="btn sm" id="pfBulkExport" ${pfSel.size?'':'disabled'}>⬇ Exporter la sélection</button>
+    ${isAdmin()?`<select id="pfBulkAssign" style="border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:13px">
+      <option value="">Assigner responsable…</option>
+      ${DB.profiles.map(p=>`<option value="${p.id}">${esc(p.full_name)}</option>`).join('')}
+      <option value="__none__">— Retirer le responsable —</option>
+    </select>
+    <button class="btn sm danger" id="pfBulkDelete" ${pfSel.size?'':'disabled'}>🗑 Supprimer (${pfSel.size})</button>`:''}
+  </div>`:''}`;
   if(!clients.length){$('#view-portfolio').innerHTML=addBar+'<div class="empty-state"><div class="big">🗂</div>Aucun dossier ne correspond.<br>Modifiez la recherche ou le filtre.</div>';bindPortfolio();return;}
   $('#view-portfolio').innerHTML=addBar+`<div class="pf-grid">${clients.map(c=>{
     const ts=DB.tasks.filter(t=>t.client_id===c.id);
@@ -1068,8 +1102,8 @@ function renderPortfolio(){
     const late=ts.filter(isLate).length,blocked=ts.filter(t=>t.status==='blocked').length;
     const pct=ts.length?Math.round(ts.reduce((a,t)=>a+(t.status==='done'?100:t.progress),0)/ts.length):0;
     const owns=canEditClient(c);
-    return `<div class="card pf-card">
-      <div class="pf-head"><h3 style="margin:0">🏢 ${esc(c.name)}</h3>
+    return `<div class="card pf-card ${pfSelMode&&pfSel.has(c.id)?'pf-selected':''}">
+      <div class="pf-head"><h3 style="margin:0">${pfSelMode?`<input type="checkbox" class="pf-selchk" data-id="${c.id}" ${pfSel.has(c.id)?'checked':''} style="margin-right:8px;transform:scale(1.2)">`:''}🏢 ${esc(c.name)}</h3>
         <div style="display:flex;gap:6px">
           <button class="btn sm pf-bases" data-id="${c.id}" title="Suivi des bases">▤</button>
           <button class="btn sm primary pf-add" data-id="${c.id}">＋ Tâche</button>
@@ -1116,6 +1150,18 @@ function bindPortfolio(){
     const i=$('#pfSearch');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}};
   const rs=$('#pfRespSel');
   if(rs)rs.onchange=()=>{pfResp=rs.value;renderPortfolio();};
+  /* Mode sélection */
+  const selBtn=$('#pfSelectBtn');
+  if(selBtn)selBtn.onclick=()=>{pfSelMode=!pfSelMode;if(!pfSelMode)pfSel.clear();renderPortfolio();};
+  $$('#view-portfolio .pf-selchk').forEach(cb=>cb.onchange=()=>{
+    if(cb.checked)pfSel.add(cb.dataset.id);else pfSel.delete(cb.dataset.id);renderPortfolio();
+  });
+  const visibleIds=()=>$$('#view-portfolio .pf-selchk').map(c=>c.dataset.id);
+  const selAll=$('#pfSelAll');if(selAll)selAll.onclick=()=>{visibleIds().forEach(id=>pfSel.add(id));renderPortfolio();};
+  const selClear=$('#pfSelClear');if(selClear)selClear.onclick=()=>{pfSel.clear();renderPortfolio();};
+  const bExp=$('#pfBulkExport');if(bExp)bExp.onclick=()=>exportSelection([...pfSel]);
+  const bAssign=$('#pfBulkAssign');if(bAssign)bAssign.onchange=()=>bulkAssign(bAssign.value);
+  const bDel=$('#pfBulkDelete');if(bDel)bDel.onclick=bulkDelete;
   $$('#view-portfolio .pf-task').forEach(el=>el.onclick=()=>openModal(el.dataset.id));
   $$('#view-portfolio .pf-add').forEach(b=>b.onclick=()=>{openModal(null);$('#f_client').value=b.dataset.id;});
   $$('#view-portfolio .pf-bases').forEach(b=>b.onclick=()=>{basesClient=b.dataset.id;setView('bases');});
@@ -1137,6 +1183,57 @@ function bindPortfolio(){
     if(error){alert('Ce dossier existe peut-être déjà.');return;}
     DB.clients.push(data);DB.clients.sort((a,b)=>a.name.localeCompare(b.name,'fr'));render();
   };
+}
+async function bulkAssign(val){
+  if(!val)return;
+  if(!isAdmin()){alert('Action réservée à l\u2019administrateur.');return;}
+  const ids=[...pfSel];if(!ids.length)return;
+  const rid=val==='__none__'?null:val;
+  const who=rid?profName(rid):'aucun responsable';
+  if(!confirm(`Assigner « ${who} » à ${ids.length} dossier(s) ?`)){renderPortfolio();return;}
+  const {error}=await sb.from('clients').update({responsible_id:rid}).in('id',ids);
+  if(error){alert('Erreur : '+error.message);setSync(false);return;}
+  DB.clients.forEach(c=>{if(pfSel.has(c.id))c.responsible_id=rid;});
+  setSync(true);pfSel.clear();pfSelMode=false;render();
+}
+async function bulkDelete(){
+  if(!isAdmin()){alert('Suppression réservée à l\u2019administrateur.');return;}
+  const ids=[...pfSel];if(!ids.length)return;
+  const noms=DB.clients.filter(c=>pfSel.has(c.id)).map(c=>c.name);
+  const rep=prompt(`Supprimer définitivement ${ids.length} dossier(s) et toutes leurs données de bases ?\n\n${noms.slice(0,8).join(', ')}${noms.length>8?'…':''}\n\nPour confirmer, tapez : SUPPRIMER`);
+  if(rep===null)return;
+  if(rep.trim().toUpperCase()!=='SUPPRIMER'){alert('Confirmation incorrecte. Aucune suppression.');return;}
+  const {error}=await sb.from('clients').delete().in('id',ids);
+  if(error){alert('Suppression impossible : '+error.message);setSync(false);return;}
+  DB.clients=DB.clients.filter(c=>!pfSel.has(c.id));
+  DB.journals=DB.journals.filter(j=>!ids.includes(j.client_id));
+  DB.tasks.forEach(t=>{if(ids.includes(t.client_id))t.client_id=null;});
+  log(null,'Suppression multiple',`${ids.length} dossier(s) supprimé(s) : ${noms.slice(0,5).join(', ')}${noms.length>5?'…':''}`);
+  setSync(true);pfSel.clear();pfSelMode=false;render();
+  alert(`${ids.length} dossier(s) supprimé(s).`);
+}
+function exportSelection(ids){
+  if(!ids.length)return;
+  const wb=XLSX.utils.book_new();const used={};
+  const sheetName=nm=>{let s=nm.replace(/[:\\\/?*\[\]]/g,' ').slice(0,28)||'Dossier';let n=s,i=2;while(used[n.toLowerCase()]){n=(s.slice(0,25)+' '+i);i++;}used[n.toLowerCase()]=1;return n;};
+  const sel=DB.clients.filter(c=>ids.includes(c.id)).sort((a,b)=>a.name.localeCompare(b.name,'fr'));
+  const recap=[['DOSSIERS','TYPE','Responsable','Interlocuteur','Adresse','Téléphone','Mail']];
+  sel.forEach(c=>recap.push([c.name,c.type||'',clientResp(c)||'',c.interlocutor||'',c.address||'',c.phone||'',c.email||'']));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(recap),'Liste des dossiers');
+  sel.forEach(c=>{
+    const tenue=DB.journals.filter(j=>j.client_id===c.id&&j.section==='tenue');
+    const decls=DB.journals.filter(j=>j.client_id===c.id&&j.section==='declaration');
+    if(!tenue.length&&!decls.length)return;
+    const weeks=weekDates(tenue);const aoa=[];
+    aoa.push(['SITUATION DE LA TENUE DE COMPTABILITE DE '+c.name.toUpperCase()+'  ·  '+basesYear]);aoa.push([]);
+    aoa.push(['Code journal','Intitulé journal',...MONTHS,...weeks.map(w=>fmtDs(w))]);
+    tenue.forEach(j=>{const row=[j.code,j.label||''];for(let m=1;m<=12;m++)row.push(monthMark(j.id,basesYear,m)?'X':'');
+      weeks.forEach(w=>{const x=countsFor(j.id).find(y=>y.week_date===w);row.push(x?x.count:'');});aoa.push(row);});
+    aoa.push([]);aoa.push(['SITUATION DES DECLARATIONS']);aoa.push(['Intitulé journal',...MONTHS]);
+    decls.forEach(j=>{const row=[j.code];for(let m=1;m<=12;m++)row.push(monthMark(j.id,basesYear,m)?'X':'');aoa.push(row);});
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(aoa),sheetName(c.name));
+  });
+  XLSX.writeFile(wb,'bases_selection_'+iso(new Date())+'.xlsx');
 }
 let editingClient=null;
 function openClientModal(id){
@@ -1682,7 +1779,7 @@ function renderMeeting(){
     <div class="report" id="reportZone">
       <div class="report-head">
         <div class="rlogo"><img src="${CMD_LOGO}" style="height:40px;vertical-align:middle;margin-right:8px">Rapport de suivi hebdomadaire<small>${esc(scopeName())}</small></div>
-        <div class="rdate">Réunion du lundi<b>${now.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</b>Préparé par ${esc(me.full_name)}</div>
+        <div class="rdate">Réunion du lundi<b>${now.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</b></div>
       </div>
       <div class="rsynth">
         <div><b>${doneW.length}</b><span>terminées cette semaine</span></div>
@@ -1980,7 +2077,7 @@ function renderMeetings(){
       <div class="card" style="cursor:pointer" data-mid="${mt.id}">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
           <div><b>PV N°${mt.number||'—'} · ${fmtD(mt.meeting_date)}</b>
-            <div class="t-sub">${(mt.attendees||[]).filter(a=>a.present).length} présent(s) · ${mt.start_time||'—'} → ${mt.end_time||'—'}</div></div>
+            <div class="t-sub">${(mt.attendees||[]).filter(a=>(a.status||(a.present?'presentiel':'absent'))!=='absent').length} participant(s) · ${mt.start_time||'—'} → ${mt.end_time||'—'}</div></div>
           <div style="display:flex;gap:6px">
             <button class="btn sm mt-word" data-mid="${mt.id}">⬇ Word</button>
             <button class="btn sm mt-pres" data-mid="${mt.id}">Présence</button>
@@ -2012,14 +2109,23 @@ function autoBody(){
 function openMeeting(id){
   if(!isAdmin())return;
   const mt=id?DB.meetings.find(x=>x.id===id):null;editingMeeting=id||null;
-  const attendees=mt?mt.attendees:DB.profiles.map(p=>({name:p.full_name,role:p.job_title||(p.role==='admin'?'Administrateur':'Collaborateur'),present:true}));
+  const attendees=mt?mt.attendees.map(a=>({name:a.name,role:a.role,status:a.status||(a.present?'presentiel':'absent')})):
+    DB.profiles.map(p=>({name:p.full_name,role:p.job_title||(p.role==='admin'?'Administrateur':'Collaborateur'),status:'presentiel'}));
   $('#mtNum').value=mt?mt.number||'':nextPvNumber();
   $('#mtDate').value=mt?mt.meeting_date:iso(today());
   $('#mtStart').value=mt?mt.start_time||'':'08:30';
   $('#mtEnd').value=mt?mt.end_time||'':'';
   $('#mtBody').value=mt?mt.body||'':autoBody();
-  $('#mtAtt').innerHTML=attendees.map((a,i)=>`<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px">
-    <input type="checkbox" data-i="${i}" ${a.present?'checked':''}> ${esc(a.name)} <span style="color:var(--faint)">— ${esc(a.role||'')}</span></label>`).join('');
+  $('#mtAtt').innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px">
+    ${attendees.map((a,i)=>`<tr>
+      <td style="padding:5px 8px 5px 0;font-weight:600;white-space:nowrap">${esc(a.name)}</td>
+      <td style="padding:5px 8px;color:var(--muted)">${esc(a.role||'')}</td>
+      <td style="padding:5px 0;text-align:right"><select data-i="${i}" class="att-status" style="border:1px solid var(--line);border-radius:7px;padding:5px 8px;font-size:12.5px">
+        <option value="presentiel" ${a.status==='presentiel'?'selected':''}>Présentiel</option>
+        <option value="enligne" ${a.status==='enligne'?'selected':''}>En ligne</option>
+        <option value="absent" ${a.status==='absent'?'selected':''}>Absent</option>
+      </select></td></tr>`).join('')}
+  </table>`;
   $('#mtAtt').dataset.att=JSON.stringify(attendees);
   $('#mtTitle').textContent=mt?`PV N°${mt.number||''}`:'Nouveau PV';
   $('#mtDelete').style.display=mt?'inline-flex':'none';
@@ -2028,7 +2134,7 @@ function openMeeting(id){
 $('#mtCancel')&&($('#mtCancel').onclick=()=>$('#meetingOverlay').classList.remove('open'));
 async function saveMeeting(){
   const att=JSON.parse($('#mtAtt').dataset.att||'[]');
-  $$('#mtAtt input[type=checkbox]').forEach(cb=>{att[+cb.dataset.i].present=cb.checked;});
+  $$('#mtAtt .att-status').forEach(s=>{att[+s.dataset.i].status=s.value;});
   const row={number:+$('#mtNum').value||null,meeting_date:$('#mtDate').value,start_time:$('#mtStart').value,
     end_time:$('#mtEnd').value,attendees:att,body:$('#mtBody').value};
   if(editingMeeting){
@@ -2094,10 +2200,18 @@ function downloadDoc(filename,htmlBody){
   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
 function frDate(d){return new Date(d+'T00:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});}
-function exportMeetingWord(id){
+async function waitLib(check,label,tries=20){
+  for(let i=0;i<tries;i++){if(check())return true;await new Promise(r=>setTimeout(r,250));}
+  alert(`La bibliothèque ${label} n'a pas pu être chargée.\nVérifiez votre connexion Internet, puis rechargez la page (vider le cache si besoin).`);
+  return false;
+}
+async function exportMeetingWord(id){
   const mt=DB.meetings.find(x=>x.id===id);if(!mt)return;
-  if(typeof docx==='undefined'){alert('Bibliothèque Word en cours de chargement, réessayez dans un instant.');return;}
-  const present=(mt.attendees||[]).filter(a=>a.present);
+  if(!await waitLib(()=>typeof docx!=='undefined','Word'))return;
+  const st=a=>a.status||(a.present?'presentiel':'absent');
+  const presentiel=(mt.attendees||[]).filter(a=>st(a)==='presentiel');
+  const enligne=(mt.attendees||[]).filter(a=>st(a)==='enligne');
+  const absents=(mt.attendees||[]).filter(a=>st(a)==='absent');
   const {Document,Packer,Paragraph,TextRun,ImageRun,AlignmentType,BorderStyle}=docx;
   const logoBytes=b64ToBytes(CMD_LOGO.split(',')[1]);
   const P=(txt,opt={})=>new Paragraph({children:[new TextRun({text:txt,...opt})],spacing:{after:120},...(opt.align?{alignment:opt.align}:{})});
@@ -2109,8 +2223,9 @@ function exportMeetingWord(id){
     new Paragraph({alignment:AlignmentType.CENTER,spacing:{after:200},children:[new TextRun({text:`PROCÈS VERBAL N°${String(mt.number||'').padStart(2,'0')} DU ${new Date(mt.meeting_date+'T00:00:00').toLocaleDateString('fr-FR')}`,bold:true,size:28})]}),
     P('Heure de début : '+(mt.start_time||'—')),
     P('Heure de fin : '+(mt.end_time||'—')),
-    P('Étaient présent(e)s à l\u2019heure :',{bold:true}),
-    ...present.map(a=>P(a.name+' ;')),
+    ...(presentiel.length?[P('Étaient présent(e)s (présentiel) :',{bold:true}),...presentiel.map(a=>P(a.name+' ;'))]:[]),
+    ...(enligne.length?[P('Ont participé en ligne :',{bold:true}),...enligne.map(a=>P(a.name+' ;'))]:[]),
+    ...(absents.length?[P('Étaient absent(e)s :',{bold:true}),...absents.map(a=>P(a.name+' ;'))]:[]),
     P(`L'an deux mille vingt-six, le ${frDate(mt.meeting_date)}, le personnel administratif et opérationnel du Cabinet Mor DIENG CMD-Sarl Audit & Conseils s'est réuni.`),
     ...bodyLines.map(l=>P(l)),
     P('Fait à Dakar, le '+frDate(mt.meeting_date)),
@@ -2126,9 +2241,9 @@ function exportMeetingWord(id){
   });
 }
 function b64ToBytes(b64){const bin=atob(b64);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);return arr;}
-function exportPresence(id){
+async function exportPresence(id){
   const mt=DB.meetings.find(x=>x.id===id);if(!mt)return;
-  if(!window.jspdf){alert('Bibliothèque PDF en cours de chargement, réessayez dans un instant.');return;}
+  if(!await waitLib(()=>!!window.jspdf,'PDF'))return;
   const att=(mt.attendees||[]);
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({unit:'mm',format:'a4'});
@@ -2144,20 +2259,23 @@ function exportPresence(id){
   doc.text('FEUILLE DE PRESENCE',W/2,y,{align:'center'});y+=9;
   doc.setFontSize(11);doc.setFont(undefined,'normal');
   doc.text('Date : '+new Date(mt.meeting_date+'T00:00:00').toLocaleDateString('fr-FR'),M,y);y+=6;
-  /* Tableau */
-  const cols=[M,M+70,M+130,M+160,W-M];const rowH=14;
-  const head=['Nom(s) et prénom(s)','Fonction','Tél','Signature'];
+  /* Tableau : Nom | Fonction | Participation | Signature */
+  const cols=[M,M+58,M+108,M+150,W-M];const rowH=13;
+  const head=['Nom(s) et prénom(s)','Fonction','Participation','Signature'];
   doc.setFillColor(235,240,250);doc.setDrawColor(120,120,120);doc.setLineWidth(0.2);
   doc.rect(M,y,W-2*M,9,'FD');doc.setFont(undefined,'bold');doc.setFontSize(9);
   head.forEach((h,i)=>doc.text(h,cols[i]+2,y+6));
   y+=9;doc.setFont(undefined,'normal');
+  const stLabel={presentiel:'Présentiel',enligne:'En ligne',absent:'Absent'};
   att.forEach(a=>{
     if(y+rowH>270){doc.addPage();y=20;}
+    const stat=a.status||(a.present?'presentiel':'absent');
     doc.rect(M,y,W-2*M,rowH);
     for(let i=1;i<cols.length;i++)doc.line(cols[i],y,cols[i],y+rowH);
     doc.setFontSize(9);
-    doc.text(doc.splitTextToSize(a.name||'',66),cols[0]+2,y+6);
-    doc.text(doc.splitTextToSize(a.role||'',56),cols[1]+2,y+6);
+    doc.text(doc.splitTextToSize(a.name||'',54),cols[0]+2,y+6);
+    doc.text(doc.splitTextToSize(a.role||'',46),cols[1]+2,y+6);
+    doc.text(stLabel[stat]||'',cols[2]+2,y+6);
     y+=rowH;
   });
   /* Pied */
@@ -2542,6 +2660,38 @@ function mdToHtml(md){
   if(inList)html+='</ul>';
   return html;
 }
+
+/* ================= PROFIL / MOT DE PASSE ================= */
+/* Filet de sécurité : si les bibliothèques d'export ne sont pas chargées
+   (ancien cache), on les réinjecte dynamiquement. */
+(function(){
+  function ensure(test,src){if(!test()){const s=document.createElement('script');s.src=src;document.head.appendChild(s);}}
+  setTimeout(()=>{
+    ensure(()=>typeof docx!=='undefined','https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/index.umd.js');
+    ensure(()=>!!window.jspdf,'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  },1500);
+})();
+$('#profileBtn')&&($('#profileBtn').onclick=()=>{
+  $('#profInfo').innerHTML=`Connecté en tant que <b>${esc(me.full_name)}</b>${me.job_title?' · '+esc(me.job_title):''}<br>Identifiant : ${esc(me.username)} · ${me.role==='admin'?'Administrateur':'Collaborateur'}`;
+  $('#pwNew').value='';$('#pwConfirm').value='';$('#pwErr').style.display='none';$('#pwOk').style.display='none';
+  $('#profileOverlay').classList.add('open');
+});
+$('#profCancel')&&($('#profCancel').onclick=()=>$('#profileOverlay').classList.remove('open'));
+$('#profileOverlay')&&($('#profileOverlay').onclick=e=>{if(e.target===$('#profileOverlay'))$('#profileOverlay').classList.remove('open');});
+$('#pwSave')&&($('#pwSave').onclick=async()=>{
+  const a=$('#pwNew').value,b=$('#pwConfirm').value;
+  const err=$('#pwErr'),ok=$('#pwOk');err.style.display='none';ok.style.display='none';
+  if(a.length<8){err.textContent='Le mot de passe doit faire au moins 8 caractères.';err.style.display='block';return;}
+  if(a!==b){err.textContent='Les deux mots de passe ne correspondent pas.';err.style.display='block';return;}
+  $('#pwSave').disabled=true;$('#pwSave').textContent='Modification…';
+  const {error}=await sb.auth.updateUser({password:a});
+  $('#pwSave').disabled=false;$('#pwSave').textContent='Changer le mot de passe';
+  if(error){err.textContent='Impossible : '+error.message;err.style.display='block';}
+  else{ok.textContent='Mot de passe modifié avec succès.';ok.style.display='block';$('#pwNew').value='';$('#pwConfirm').value='';}
+});
+$('#logoutBtn')&&($('#logoutBtn').onclick=async()=>{
+  if(confirm('Se déconnecter de Pilotage Cabinet ?')){await sb.auth.signOut();location.reload();}
+});
 
 /* ================= INSTALLATION PWA ================= */
 let deferredPrompt=null;
