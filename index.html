@@ -485,6 +485,7 @@ td .t-sub{font-size:12px;color:var(--faint)}
       <div class="spacer"></div>
       <select id="scopeSel" style="border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:var(--card);font-size:13px" title="Périmètre affiché"></select>
       <span class="sync-badge" title="Synchronisation" style="font-size:12px;color:var(--muted)"><span class="sync-dot" id="syncDot"></span><span id="syncLbl">Synchronisé</span></span>
+      <button class="btn" id="installBtn" title="Installer l'application sur cet appareil" style="display:none">⬇ Installer l'appli</button>
       <button class="btn" id="notifBell" title="Notifications" style="position:relative">🔔<span class="nb-count" style="display:none;position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;font-size:10px;font-weight:700;border-radius:99px;padding:0 5px">0</span></button>
       <button class="btn" id="importXlsBtn" title="Importer tâches (entreprise|tâche) ou fichier de bases (Classeur)">⬆<span class="btn-tx"> Importer</span></button>
       <input type="file" id="importFile" accept=".xlsx,.xls" style="display:none">
@@ -2541,6 +2542,34 @@ function mdToHtml(md){
   if(inList)html+='</ul>';
   return html;
 }
+
+/* ================= INSTALLATION PWA ================= */
+let deferredPrompt=null;
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault();deferredPrompt=e;
+  const b=$('#installBtn');if(b)b.style.display='inline-flex';
+});
+window.addEventListener('appinstalled',()=>{
+  deferredPrompt=null;const b=$('#installBtn');if(b)b.style.display='none';
+});
+(function(){
+  const b=$('#installBtn');if(!b)return;
+  b.onclick=async()=>{
+    if(deferredPrompt){
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt=null;b.style.display='none';
+    }else{
+      /* iOS / navigateurs sans invite native : on explique la marche à suivre */
+      const iOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+      alert(iOS
+        ? "Pour installer sur iPhone/iPad :\n\n1. Touchez le bouton Partager (carré avec une flèche) en bas de Safari.\n2. Choisissez « Sur l'écran d'accueil ».\n3. Validez avec « Ajouter ».\n\nL'application apparaîtra comme une vraie appli."
+        : "Pour installer :\n\nDans le menu de votre navigateur (⋮ en haut à droite), choisissez « Installer l'application » ou « Ajouter à l'écran d'accueil ».\n\nSi l'option n'apparaît pas, l'application est peut-être déjà installée.");
+    }
+  };
+  /* Masquer le bouton si déjà en mode application installée */
+  if(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)b.style.display='none';
+})();
 
 /* ================= PWA & DÉMARRAGE ================= */
 /* Logo Cabinet Mor DIENG dans l'interface */
