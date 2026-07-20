@@ -927,6 +927,10 @@ function setView(v){
   $('#pageTitle').textContent=TITLES[v][0];$('#pageSub').textContent=TITLES[v][1];
   $('#sidebar').classList.remove('open');$('#navScrim').classList.remove('show');
   render();
+  /* La vue bases a un rafraîchissement temps réel désactivé (pour ne pas effacer
+     les croix en cours) : on recharge donc les données fraîches à l'entrée pour
+     être sûr que l'affichage reflète la base. */
+  if(v==='bases'){loadAll().then(()=>{if(currentView==='bases')renderBases();});}
 }
 $$('.nav button').forEach(b=>b.onclick=()=>setView(b.dataset.view));
 function toggleNav(open){
