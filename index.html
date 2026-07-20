@@ -2174,6 +2174,10 @@ function renderBillingClients(){
     <div class="filters no-print">
       <div class="search" style="max-width:280px"><input id="bcSearch" placeholder="Rechercher un client…" value="${esc(bcFilter)}"></div>
       <button class="btn primary sm" id="bcAddBtn">＋ Nouveau client</button>
+      <button class="btn sm" id="bcImportBtn">↑ Importer (Excel)</button>
+      <button class="btn sm" id="bcExportBtn">↓ Exporter</button>
+      <button class="btn sm" id="bcTemplateBtn">📄 Modèle vierge</button>
+      <input type="file" id="bcImportFile" accept=".xlsx,.xls" style="display:none">
       <span class="section-note" style="margin:0 0 0 auto">${list.length} client(s) · ${B().clients.filter(c=>c.actif).length} actif(s)</span>
     </div>
     <div class="card" style="padding:0;overflow:hidden"><div class="bt-wrap" style="border:0;box-shadow:none;margin:0">
@@ -2190,6 +2194,10 @@ function renderBillingClients(){
     </tbody></table></div></div>`;
   const s=$('#bcSearch');if(s)s.oninput=()=>{bcFilter=s.value;renderBillingClients();const i=$('#bcSearch');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}};
   $('#bcAddBtn').onclick=()=>openBillingClient(null);
+  $('#bcImportBtn').onclick=()=>$('#bcImportFile').click();
+  $('#bcImportFile').onchange=e=>{if(e.target.files[0])importBillingClients(e.target.files[0]);e.target.value='';};
+  $('#bcExportBtn').onclick=exportBillingClients;
+  $('#bcTemplateBtn').onclick=templateBillingClients;
   $$('#view-billing_clients .bc-edit').forEach(b=>b.onclick=()=>openBillingClient(b.dataset.id));
 }
 let editingBC=null;
@@ -2247,6 +2255,9 @@ function renderInvoices(){
       <select id="invExercice"><option value="">Tous exercices</option>${exercices.map(e=>`<option value="${e}" ${f.exercice==e?'selected':''}>${e}</option>`).join('')}</select>
       <button class="btn primary sm" id="invNewBtn">＋ Nouvelle facture</button>
       <button class="btn sm" id="invGenBtn">⚡ Génération mensuelle</button>
+      <button class="btn sm" id="invImportBtn">↑ Importer situation</button>
+      <button class="btn sm" id="invTemplateBtn">📄 Modèle</button>
+      <input type="file" id="invImportFile" accept=".xlsx,.xls" style="display:none">
       <button class="btn sm" id="invExportBtn">⬇ Excel</button>
     </div>
     <div class="card" style="padding:0;overflow:hidden"><div class="bt-wrap" style="border:0;box-shadow:none;margin:0">
@@ -2272,10 +2283,55 @@ function renderInvoices(){
   $('#invExercice').onchange=e=>{invFilter.exercice=e.target.value;renderInvoices();};
   $('#invNewBtn').onclick=()=>openInvoice(null);
   $('#invGenBtn').onclick=openGenMonth;
+  $('#invImportBtn').onclick=()=>$('#invImportFile').click();
+  $('#invImportFile').onchange=e=>{if(e.target.files[0])importSituation(e.target.files[0]);e.target.value='';};
+  $('#invTemplateBtn').onclick=templateSituation;
   $('#invExportBtn').onclick=exportInvoicesExcel;
   $$('#view-invoices .inv-open').forEach(b=>b.onclick=()=>openInvoice(b.dataset.id));
   $$('#view-invoices .inv-pdf').forEach(b=>b.onclick=()=>invoicePDF(b.dataset.id));
 }
+/* --- Import / Export / Modèle des clients de facturation --- */
+const BC_COLS=['Raison sociale','Adresse','Téléphone','Email','NINEA','Référence','Montant HT','Taux TVA','Actif','Observations'];
+function templateBillingClients(){
+  const aoa=[BC_COLS,
+    ['NEXT SA','Dakar','771234567','contact@next.sn','1234567','REF-001',100000,18,'oui','Exemple – à remplacer'],
+    ['','','','','','',0,18,'oui','']];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(aoa),'Clients');
+  XLSX.writeFile(wb,'modele_clients_facturation.xlsx');
+}
+function exportBillingClients(){
+  const rows=[BC_COLS];
+  B().clients.forEach(c=>rows.push([c.raison_sociale,c.adresse,c.telephone,c.email,c.ninea,c.reference,+c.montant_ht||0,+c.taux_tva||0,c.actif?'oui':'non',c.observations]));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),'Clients');
+  XLSX.writeFile(wb,'clients_facturation_'+iso(new Date())+'.xlsx');
+}
+async function importBillingClients(file){
+  try{
+    const buf=await file.arrayBuffer();const wb=XLSX.read(buf,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{header:1});
+    if(!rows.length){alert('Fichier vide.');return;}
+    /* on repère l'entête puis les lignes */
+    let start=0;const first=(rows[0]||[]).map(x=>(''+x).toLowerCase());
+    if(first.some(x=>x.includes('raison')||x.includes('sociale')))start=1;
+    const toImport=[];
+    for(let i=start;i<rows.length;i++){
+      const r=rows[i];if(!r||!r[0]||!(''+r[0]).trim())continue;
+      const actif=(''+(r[8]??'oui')).toLowerCase();
+      toImport.push({raison_sociale:(''+r[0]).trim(),adresse:(''+(r[1]||'')).trim(),telephone:(''+(r[2]||'')).trim(),
+        email:(''+(r[3]||'')).trim(),ninea:(''+(r[4]||'')).trim(),reference:(''+(r[5]||'')).trim(),
+        montant_ht:+(''+(r[6]||0)).replace(/[^\d.-]/g,'')||0,taux_tva:+(''+(r[7]??18)).replace(/[^\d.-]/g,'')||18,
+        actif:!(actif==='non'||actif==='no'||actif==='0'||actif==='false'),observations:(''+(r[9]||'')).trim()});
+    }
+    if(!toImport.length){alert('Aucune ligne client trouvée.');return;}
+    if(!confirm(`Importer ${toImport.length} client(s) de facturation ?`))return;
+    const {data,error}=await dbWrite(()=>sb.from('billing_clients').insert(toImport).select());
+    if(error){alert('Erreur import : '+error.message);return;}
+    if(data)B().clients.push(...data);
+    setSync(true);render();
+    alert(`${data?data.length:toImport.length} client(s) importé(s).`);
+  }catch(e){alert('Fichier illisible : '+e.message);}
+}
+
 function accessDenied(){return '<div class="empty-state">Accès réservé aux utilisateurs de la facturation.</div>';}
 function isBillingUser(){return me&&(me.role==='admin'||me.role==='assistante');}
 
@@ -2538,6 +2594,82 @@ function exportRecouvrement(){
   B().invoices.filter(i=>i.statut!=='annulee').forEach(i=>rows.push([i.numero,i.client_nom,i.date_echeance||'',+i.montant_ttc||0,+i.total_paye||0,invBalance(i),invLate(i),i.statut_paiement]));
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),'Recouvrement');
   XLSX.writeFile(wb,'recouvrement_'+iso(new Date())+'.xlsx');
+}
+
+/* --- Import de la situation de recouvrement (crée de vraies factures) --- */
+const SIT_COLS=['Numéro','Client','Date facture','Date échéance','Montant HT','Taux TVA','Montant TTC','Déjà encaissé','Désignation','Période'];
+function templateSituation(){
+  const aoa=[SIT_COLS,
+    ['FAC-2026-0001','NEXT SA','2026-01-05','2026-02-05',100000,18,118000,50000,'Prestations comptables','Janvier 2026'],
+    ['FAC-2026-0002','AUTRE SARL','2026-01-05','2026-02-05',200000,18,236000,0,'Prestations comptables','Janvier 2026'],
+    ['','','','','','','','','','']];
+  const aoa2=[['NOTICE'],
+    ['• Numéro : laissez vide pour une numérotation automatique.'],
+    ['• Client : le nom exact (sera rapproché de la base clients si possible).'],
+    ['• Montant TTC : si vide, calculé depuis HT + TVA.'],
+    ['• Déjà encaissé : montant total déjà reçu (le statut se calcule tout seul).'],
+    ['• Les dates au format AAAA-MM-JJ.'],
+    ['• Les factures importées sont créées en statut "validée".']];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(aoa),'Situation');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(aoa2),'Notice');
+  XLSX.writeFile(wb,'modele_situation_recouvrement.xlsx');
+}
+async function importSituation(file){
+  try{
+    const buf=await file.arrayBuffer();const wb=XLSX.read(buf,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{header:1});
+    if(!rows.length){alert('Fichier vide.');return;}
+    let start=0;const first=(rows[0]||[]).map(x=>(''+x).toLowerCase());
+    if(first.some(x=>x.includes('client')||x.includes('num')))start=1;
+    const cy=new Date().getFullYear();
+    const invoices=[];const paiements=[];const warns=[];
+    let autoNum={};   /* compteur par exercice pour les numéros auto */
+    /* pré-charger les numéros existants par exercice */
+    B().invoices.forEach(i=>{const m=(i.numero||'').match(/(\d+)$/);if(m){autoNum[i.exercice]=Math.max(autoNum[i.exercice]||0,+m[1]);}});
+    for(let i=start;i<rows.length;i++){
+      const r=rows[i];if(!r||!(r[1]&&(''+r[1]).trim()))continue;   /* client obligatoire */
+      const clientNom=(''+r[1]).trim();
+      const ht=+(''+(r[4]||0)).replace(/[^\d.-]/g,'')||0;
+      const tva=+(''+(r[5]??18)).replace(/[^\d.-]/g,'')||18;
+      let ttc=+(''+(r[6]||0)).replace(/[^\d.-]/g,'')||0;
+      if(!ttc)ttc=ht+ht*tva/100;
+      const mtva=ttc-ht;
+      const paye=+(''+(r[7]||0)).replace(/[^\d.-]/g,'')||0;
+      const dateF=(''+(r[2]||iso(new Date()))).slice(0,10);
+      const exercice=+(dateF.slice(0,4))||cy;
+      let numero=(''+(r[0]||'')).trim();
+      if(!numero){autoNum[exercice]=(autoNum[exercice]||0)+1;numero='FAC-'+exercice+'-'+String(autoNum[exercice]).padStart(4,'0');}
+      /* rapprochement client */
+      const cli=B().clients.find(c=>c.raison_sociale.toLowerCase()===clientNom.toLowerCase());
+      const statutPaiement=paye<=0?'non_encaissee':(paye>=ttc-0.5?'encaissee':'partiel');
+      invoices.push({numero,client_id:cli?cli.id:null,client_nom:clientNom,client_adresse:cli?.adresse||'',client_telephone:cli?.telephone||'',client_ninea:cli?.ninea||'',
+        designation:(''+(r[8]||'Prestations comptables')).trim(),periode:(''+(r[9]||'')).trim(),
+        mois:new Date(dateF+'T00:00:00').getMonth()+1,exercice,date_facture:dateF,date_echeance:(''+(r[3]||'')).slice(0,10)||null,
+        montant_ht:ht,taux_tva:tva,montant_tva:mtva,montant_ttc:ttc,statut:'validee',statut_paiement:statutPaiement,total_paye:paye,created_by:me.id,
+        _paye:paye});
+    }
+    if(!invoices.length){alert('Aucune facture trouvée dans le fichier.');return;}
+    if(!confirm(`Importer ${invoices.length} facture(s) avec leur état d'encaissement ?\nElles seront créées en statut "validée".`))return;
+    /* insertion (on retire le champ technique _paye) */
+    const clean=invoices.map(({_paye,...x})=>x);
+    const {data,error}=await dbWrite(()=>sb.from('invoices').insert(clean).select());
+    if(error){alert('Erreur import : '+error.message+'\n(Doublon de numéro ou de client+mois+exercice ?)');return;}
+    if(data){
+      B().invoices.unshift(...data);
+      /* créer un encaissement récapitulatif pour les factures déjà payées */
+      for(let k=0;k<data.length;k++){
+        const paye=invoices[k]._paye;
+        if(paye>0){
+          const pr={invoice_id:data[k].id,date_reglement:data[k].date_facture,mode:'autre',reference:'Reprise situation',montant:paye,observations:'Import situation à date',created_by:me.id};
+          const {data:pd}=await dbWrite(()=>sb.from('payments').insert(pr).select().single());
+          if(pd)B().payments.unshift(pd);
+        }
+      }
+    }
+    setSync(true);render();
+    alert(`${data?data.length:invoices.length} facture(s) importée(s) avec leur situation.`);
+  }catch(e){alert('Fichier illisible : '+e.message);}
 }
 
 function renderHistory(){
