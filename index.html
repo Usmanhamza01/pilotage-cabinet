@@ -456,14 +456,18 @@ td .t-sub{font-size:12px;color:var(--faint)}
       <button data-view="meeting"><span class="ic">🗓</span> Réunion du lundi</button>
       <button data-view="meetings"><span class="ic">📋</span> PV & réunions</button>
       <button data-view="alerts"><span class="ic">🔔</span> Alertes <span class="badge" id="alertCount" style="display:none">0</span></button>
-      <div class="nav-label">Travail</div>
-      <button data-view="portfolio"><span class="ic">🗂</span> Portefeuille clients</button>
-      <button data-view="tasks"><span class="ic">☰</span> Tâches</button>
-      <button data-view="kanban"><span class="ic">▥</span> Kanban</button>
-      <button data-view="bases"><span class="ic">▤</span> Suivi des bases</button>
-      <button data-view="chat"><span class="ic">💬</span> Chat <span class="badge" id="chatBadge" style="display:none">0</span></button>
-      <div class="nav-label">Suivi</div>
-      <button data-view="history"><span class="ic">🕘</span> Historique</button>
+      <div class="nav-label" id="navlabWork">Travail</div>
+      <button data-view="portfolio" class="work-nav"><span class="ic">🗂</span> Portefeuille clients</button>
+      <button data-view="tasks" class="work-nav"><span class="ic">☰</span> Tâches</button>
+      <button data-view="kanban" class="work-nav"><span class="ic">▥</span> Kanban</button>
+      <button data-view="bases" class="work-nav"><span class="ic">▤</span> Suivi des bases</button>
+      <button data-view="chat" class="work-nav"><span class="ic">💬</span> Chat <span class="badge" id="chatBadge" style="display:none">0</span></button>
+      <div class="nav-label" id="navlabBilling" style="display:none">Facturation</div>
+      <button data-view="invoices" id="navInvoices" style="display:none"><span class="ic">🧾</span> Factures</button>
+      <button data-view="billing_dash" id="navBillingDash" style="display:none"><span class="ic">📊</span> Recouvrement</button>
+      <button data-view="billing_clients" id="navBillingClients" style="display:none"><span class="ic">🏢</span> Clients facturation</button>
+      <div class="nav-label" id="navlabSuivi">Suivi</div>
+      <button data-view="history" class="work-nav"><span class="ic">🕘</span> Historique</button>
       <button data-view="admin" id="navAdmin" style="display:none"><span class="ic">👥</span> Utilisateurs</button>
     </nav>
     <div class="sidebar-foot">
@@ -504,6 +508,9 @@ td .t-sub{font-size:12px;color:var(--faint)}
       <div id="view-tasks" class="view" style="display:none"></div>
       <div id="view-kanban" class="view" style="display:none"></div>
       <div id="view-bases" class="view" style="display:none"></div>
+      <div id="view-invoices" class="view" style="display:none"></div>
+      <div id="view-billing_dash" class="view" style="display:none"></div>
+      <div id="view-billing_clients" class="view" style="display:none"></div>
       <div id="view-chat" class="view" style="display:none"></div>
       <div id="view-meeting" class="view" style="display:none"></div>
       <div id="view-meetings" class="view" style="display:none"></div>
@@ -616,6 +623,100 @@ td .t-sub{font-size:12px;color:var(--faint)}
   </div>
 </div>
 
+<!-- Modal client de facturation -->
+<div class="overlay" id="bcOverlay">
+  <div class="modal" style="max-width:600px">
+    <h2 id="bcTitle">Client de facturation</h2>
+    <div class="fgrid">
+      <div class="fld full"><label>Raison sociale *</label><input id="bcName"></div>
+      <div class="fld full"><label>Adresse</label><input id="bcAddr"></div>
+      <div class="fld"><label>Téléphone</label><input id="bcTel"></div>
+      <div class="fld"><label>Email</label><input id="bcEmail"></div>
+      <div class="fld"><label>NINEA</label><input id="bcNinea"></div>
+      <div class="fld"><label>Référence client</label><input id="bcRef"></div>
+      <div class="fld"><label>Montant mensuel HT (FCFA)</label><input type="number" id="bcHT" oninput="if(window._bcTTC)window._bcTTC()"></div>
+      <div class="fld"><label>Taux TVA (%)</label><input type="number" id="bcTVA" value="18"></div>
+      <div class="fld full"><label>Observations</label><textarea id="bcObs" style="min-height:60px"></textarea></div>
+      <div class="fld"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="bcActif" checked> Client actif (facturé automatiquement)</label></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn danger" id="bcDelete" style="margin-right:auto;display:none">Supprimer</button>
+      <button class="btn" id="bcCancel">Annuler</button>
+      <button class="btn primary" id="bcSave">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal facture -->
+<div class="overlay" id="invoiceOverlay">
+  <div class="modal" style="max-width:640px">
+    <h2 id="ivTitle">Facture</h2>
+    <div id="ivStatutInfo" class="section-note" style="margin:0 0 12px"></div>
+    <div class="fgrid">
+      <div class="fld full"><label>Client *</label><select id="ivClient"></select></div>
+      <div class="fld full"><label>Désignation</label><input id="ivDesignation"></div>
+      <div class="fld full"><label>Équipe de mission (une personne par ligne)</label><textarea id="ivEquipe" style="min-height:56px" placeholder="MR. DIENG&#10;D.M.YEDESS&#10;O. NDIAYE"></textarea></div>
+      <div class="fld"><label>Période concernée</label><input id="ivPeriode" placeholder="Ex : Juillet 2026"></div>
+      <div class="fld"><label>Mois</label><select id="ivMois">${''}</select></div>
+      <div class="fld"><label>Exercice</label><input type="number" id="ivExercice"></div>
+      <div class="fld"><label>Date facture</label><input type="date" id="ivDateF"></div>
+      <div class="fld"><label>Date échéance</label><input type="date" id="ivDateE"></div>
+      <div class="fld"><label>Montant HT (FCFA)</label><input type="number" id="ivHT" oninput="recalcInvModal()"></div>
+      <div class="fld"><label>Taux TVA (%)</label><input type="number" id="ivTVA" value="18" oninput="recalcInvModal()"></div>
+    </div>
+    <div style="display:flex;gap:20px;justify-content:flex-end;margin-top:10px;font-size:14px">
+      <span>TVA : <b id="ivTVAmt">0</b></span><span>TTC : <b id="ivTTC" style="color:var(--blue)">0</b></span>
+    </div>
+    <div id="ivPayments"></div>
+    <div class="modal-foot" style="flex-wrap:wrap">
+      <button class="btn danger" id="ivCancel2" style="margin-right:auto;display:none">Annuler la facture</button>
+      <button class="btn" id="ivClose">Fermer</button>
+      <button class="btn" id="ivPayBtn" style="display:none">💰 Encaissement</button>
+      <button class="btn" id="ivValidate" style="display:none">✓ Valider</button>
+      <button class="btn primary" id="ivSave">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal encaissement -->
+<div class="overlay" id="paymentOverlay">
+  <div class="modal" style="max-width:460px">
+    <h2>💰 Enregistrer un encaissement</h2>
+    <div class="section-note" style="margin:0 0 10px">Reste à payer : <b id="pyReste"></b></div>
+    <div class="fgrid">
+      <div class="fld"><label>Date du règlement</label><input type="date" id="pyDate"></div>
+      <div class="fld"><label>Mode</label><select id="pyMode">
+        <option value="especes">Espèces</option><option value="cheque">Chèque</option><option value="virement">Virement</option>
+        <option value="wave">Wave</option><option value="orange_money">Orange Money</option><option value="autre">Autre</option></select></div>
+      <div class="fld"><label>Référence</label><input id="pyRef"></div>
+      <div class="fld"><label>Montant payé (FCFA)</label><input type="number" id="pyMontant"></div>
+      <div class="fld full"><label>Observations</label><input id="pyObs"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="pyCancel">Annuler</button>
+      <button class="btn primary" id="pySave">Enregistrer le paiement</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal génération mensuelle -->
+<div class="overlay" id="genOverlay">
+  <div class="modal" style="max-width:460px">
+    <h2>⚡ Génération mensuelle des factures</h2>
+    <div id="genInfo" class="section-note" style="margin:0 0 12px"></div>
+    <div class="fgrid">
+      <div class="fld"><label>Mois</label><select id="genMois">${''}</select></div>
+      <div class="fld"><label>Exercice</label><input type="number" id="genExercice"></div>
+      <div class="fld"><label>Échéance (jours)</label><input type="number" id="genEcheance" value="30"></div>
+    </div>
+    <div class="section-note" style="margin:12px 0 0">Une facture par client actif ayant un montant HT défini. Les doublons (client + mois + exercice) sont ignorés.</div>
+    <div class="modal-foot">
+      <button class="btn" id="genCancel">Annuler</button>
+      <button class="btn primary" id="genRun">Générer les factures</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal réunion / PV -->
 <div class="overlay" id="meetingOverlay">
   <div class="modal" style="max-width:820px">
@@ -658,7 +759,7 @@ td .t-sub{font-size:12px;color:var(--faint)}
       <div class="fld full"><label>Nom complet</label><input id="um_name"></div>
       <div class="fld full"><label>Fonction (poste) — figure dans la feuille de présence</label><input id="um_job" placeholder="Ex : Responsable Département Assistance Comptable"></div>
       <div class="fld"><label>Nom d'utilisateur (connexion)</label><input id="um_username" disabled style="background:#f4f6fa"></div>
-      <div class="fld"><label>Rôle</label><select id="um_role"><option value="collab">Collaborateur</option><option value="admin">Administrateur</option></select></div>
+      <div class="fld"><label>Rôle</label><select id="um_role"><option value="collab">Collaborateur</option><option value="assistante">Assistante (facturation)</option><option value="admin">Administrateur</option></select></div>
     </div>
     <p class="section-note" id="um_self" style="display:none;margin:12px 0 0;color:var(--orange)">Vous modifiez votre propre compte : le rôle ne peut pas être changé ici.</p>
     <p class="section-note" style="margin:12px 0 0">Pour changer l'identifiant de connexion ou le mot de passe : Supabase → Authentication → Users → ⋯.</p>
@@ -706,7 +807,7 @@ async function dbWrite(fn,tries=3){
   }
   return {error:last||{message:'Échec après plusieurs tentatives'}};
 }
-let DB={profiles:[],clients:[],tasks:[],history:[],journals:[],months:[],counts:[],baseStatus:[],meetings:[],comments:[],notifs:[],chat:[],reads:[]};
+let DB={profiles:[],clients:[],tasks:[],history:[],journals:[],months:[],counts:[],baseStatus:[],meetings:[],comments:[],notifs:[],chat:[],reads:[],billing:{clients:[],invoices:[],payments:[],history:[]}};
 let currentView='dash',editingId=null,scope='me';
 let basesClient='',basesYear=new Date().getFullYear(),basesWeek='';
 let basesExtraWeeks={};           /* clientId -> lundis ajoutés manuellement */
@@ -793,12 +894,24 @@ async function enter(){
   $('#meChip').innerHTML=`<b>${esc(me.full_name)}</b>${me.role==='admin'?'Administrateur':'Collaborateur'}`;
   $('#navAdmin').style.display=me.role==='admin'?'flex':'none';
   $('#navBasecheck').style.display=me.role==='admin'?'flex':'none';
+  /* Module facturation : visible pour admin et assistante */
+  const billingUser=me.role==='admin'||me.role==='assistante';
+  ['navlabBilling','navInvoices','navBillingDash','navBillingClients'].forEach(id=>{
+    const el=$('#'+id);if(el)el.style.display=billingUser?'flex':'none';
+  });
+  /* L'assistante n'accède QU'À la facturation : on masque le reste */
+  if(me.role==='assistante'){
+    ['navlabWork','navlabSuivi'].forEach(id=>{const e=$('#'+id);if(e)e.style.display='none';});
+    $$('.work-nav').forEach(b=>b.style.display='none');
+    $$('.nav button[data-view=team],.nav button[data-view=meeting],.nav button[data-view=meetings],.nav button[data-view=alerts],.nav button[data-view=dash]').forEach(b=>b.style.display='none');
+    $('#navlabBilling')&&($('#navlabBilling').textContent='Facturation');
+  }
   scope=me.role==='admin'?'all':'me';
   pfResp=me.role==='admin'?'all':'mine';   /* portefeuille : collaborateur = ses dossiers par défaut */
   await loadAll();
   buildScopeSel();
   startRealtime();
-  setView('dash');
+  setView(me.role==='assistante'?'invoices':'dash');
 }
 function authErr(sel,msg){const e=$(sel);e.textContent=msg;e.style.display='block';}
 async function loadAll(){
@@ -821,8 +934,21 @@ async function loadAll(){
        (Supabase plafonne à 1000 par requête -> pagination). */
     const m={data:await fetchAllRows('journal_months')};
     const pc={data:await fetchAllRows('piece_counts')};
+    /* Module facturation (chargé seulement si l'utilisateur y a accès) */
+    let billing={clients:[],invoices:[],payments:[],history:[]};
+    if(me&&(me.role==='admin'||me.role==='assistante')){
+      try{
+        const [bc,inv,pay,ih]=await Promise.all([
+          sb.from('billing_clients').select('*').order('raison_sociale'),
+          sb.from('invoices').select('*').order('date_facture',{ascending:false}),
+          sb.from('payments').select('*').order('date_reglement',{ascending:false}),
+          sb.from('invoice_history').select('*').order('ts',{ascending:false}).limit(300),
+        ]);
+        billing={clients:bc.data||[],invoices:inv.data||[],payments:pay.data||[],history:ih.data||[]};
+      }catch(e){console.warn('Facturation non disponible (migration v6 non passée ?)',e);}
+    }
     DB={profiles:p.data,clients:c.data,tasks:t.data,history:h.data,journals:j.data,months:m.data,counts:pc.data,
-        baseStatus:bs.data,meetings:mt.data,comments:cm.data,notifs:nt.data,chat:ch.data,reads:cr.data};
+        baseStatus:bs.data,meetings:mt.data,comments:cm.data,notifs:nt.data,chat:ch.data,reads:cr.data,billing};
     setSync(true);
   }catch(e){console.error(e);setSync(false);}
 }
@@ -927,6 +1053,9 @@ const TITLES={dash:['Tableau de bord','Vue synthétique avant réunion'],
   tasks:['Tâches','Liste complète, filtres et recherche'],
   kanban:['Vue Kanban','Glissez-déposez les cartes pour changer de statut'],
   bases:['Suivi des bases','Tenue comptable, déclarations et pièces hebdomadaires'],
+  invoices:['Factures','Création, suivi et encaissement des factures'],
+  billing_dash:['Recouvrement','Tableau de bord et suivi des encaissements'],
+  billing_clients:['Clients facturation','Base clients pour la génération des factures'],
   chat:['Chat du cabinet','Salon commun, messages privés et assistant IA'],
   meeting:['Réunion du lundi','Rapport hebdomadaire généré automatiquement'],
   meetings:['PV & réunions','Rédaction, présence et archive des procès-verbaux'],
@@ -1025,7 +1154,8 @@ function render(){
   const al=alertsList();
   const ac=$('#alertCount');ac.style.display=al.length?'inline-block':'none';ac.textContent=al.length;
   ({dash:renderDash,team:renderTeam,basecheck:renderBasecheck,portfolio:renderPortfolio,tasks:renderTasks,kanban:renderKanban,bases:renderBases,
-    meeting:renderMeeting,meetings:renderMeetings,alerts:renderAlerts,history:renderHistory,admin:renderAdmin,chat:renderChat})[currentView]();
+    meeting:renderMeeting,meetings:renderMeetings,alerts:renderAlerts,history:renderHistory,admin:renderAdmin,chat:renderChat,
+    invoices:renderInvoices,billing_dash:renderBillingDash,billing_clients:renderBillingClients})[currentView]();
   renderNotifs();
   const cb=$('#chatBadge');if(cb){const u=chatUnread();cb.style.display=u?'inline-block':'none';cb.textContent=u;}
 }
@@ -1998,6 +2128,418 @@ async function markRead(channel){
   await sb.from('chat_reads').upsert({user_id:me.id,channel,last_read:now});
 }
 
+/* ============================================================
+   MODULE DE FACTURATION
+   ============================================================ */
+const TVA_DEFAUT=18;
+const MODES_PAY={especes:'Espèces',cheque:'Chèque',virement:'Virement',wave:'Wave',orange_money:'Orange Money',autre:'Autre'};
+const fcfa=n=>(Math.round(n||0)).toLocaleString('fr-FR')+' FCFA';
+/* Nombre en toutes lettres (français) pour les factures */
+function enLettres(n){
+  n=Math.round(n||0);if(n===0)return 'zéro';
+  const u=['','un','deux','trois','quatre','cinq','six','sept','huit','neuf','dix','onze','douze','treize','quatorze','quinze','seize','dix-sept','dix-huit','dix-neuf'];
+  const d=['','','vingt','trente','quarante','cinquante','soixante','soixante','quatre-vingt','quatre-vingt'];
+  function tranche(x){
+    let s='';
+    const c=Math.floor(x/100),r=x%100;
+    if(c>0)s+=(c>1?u[c]+' ':'')+'cent'+(c>1&&r===0?'s':'')+(r?' ':'');
+    if(r<20)s+=u[r];
+    else{const di=Math.floor(r/10),un=r%10;
+      if(di===7||di===9){s+=d[di]+'-'+u[10+un];}
+      else{s+=d[di];if(un===1&&di!==8)s+=(di===8?'':'-et-un');else if(un)s+='-'+u[un];else if(di===8)s+='s';}
+    }
+    return s.trim();
+  }
+  let res='';
+  const millions=Math.floor(n/1e6),milliers=Math.floor((n%1e6)/1000),reste=n%1000;
+  if(millions>0)res+=(millions>1?tranche(millions)+' millions':'un million')+' ';
+  if(milliers>0)res+=(milliers>1?tranche(milliers).replace(/cents$/,'cent')+' ':'')+'mille'+' ';
+  if(reste>0)res+=tranche(reste);
+  return res.trim().replace(/\s+/g,' ');
+}
+const B=()=>DB.billing;
+function invLog(inv,action){
+  const row={invoice_id:inv?.id||null,invoice_numero:inv?.numero||'',action,user_id:me.id,user_name:me.full_name};
+  B().history.unshift({...row,ts:new Date().toISOString()});
+  sb.from('invoice_history').insert(row);
+}
+
+/* ---------- CLIENTS DE FACTURATION ---------- */
+let bcFilter='';
+function renderBillingClients(){
+  if(!isBillingUser()){$('#view-billing_clients').innerHTML=accessDenied();return;}
+  const q=bcFilter.toLowerCase();
+  const list=B().clients.filter(c=>!q||c.raison_sociale.toLowerCase().includes(q)||(c.reference||'').toLowerCase().includes(q));
+  $('#view-billing_clients').innerHTML=`
+    <div class="filters no-print">
+      <div class="search" style="max-width:280px"><input id="bcSearch" placeholder="Rechercher un client…" value="${esc(bcFilter)}"></div>
+      <button class="btn primary sm" id="bcAddBtn">＋ Nouveau client</button>
+      <span class="section-note" style="margin:0 0 0 auto">${list.length} client(s) · ${B().clients.filter(c=>c.actif).length} actif(s)</span>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden"><div class="bt-wrap" style="border:0;box-shadow:none;margin:0">
+    <table class="bt"><thead><tr>
+      <th class="lft">Raison sociale</th><th>Réf.</th><th>NINEA</th><th>Montant HT</th><th>TVA</th><th>TTC</th><th>Actif</th><th></th>
+    </tr></thead><tbody>
+    ${list.map(c=>{const ttc=(+c.montant_ht||0)*(1+(+c.taux_tva||0)/100);return `<tr>
+      <td class="lft"><b>${esc(c.raison_sociale)}</b>${c.telephone?`<div class="t-sub">${esc(c.telephone)}</div>`:''}</td>
+      <td>${esc(c.reference||'—')}</td><td>${esc(c.ninea||'—')}</td>
+      <td>${fcfa(c.montant_ht)}</td><td>${(+c.taux_tva||0)}%</td><td><b>${fcfa(ttc)}</b></td>
+      <td>${c.actif?'<span style="color:var(--green)">✓ Oui</span>':'<span style="color:var(--faint)">Non</span>'}</td>
+      <td><button class="btn sm bc-edit" data-id="${c.id}">✎</button></td>
+    </tr>`;}).join('')||`<tr><td colspan="8" style="padding:16px;color:var(--faint);font-style:italic">Aucun client. Ajoutez-en pour générer des factures.</td></tr>`}
+    </tbody></table></div></div>`;
+  const s=$('#bcSearch');if(s)s.oninput=()=>{bcFilter=s.value;renderBillingClients();const i=$('#bcSearch');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}};
+  $('#bcAddBtn').onclick=()=>openBillingClient(null);
+  $$('#view-billing_clients .bc-edit').forEach(b=>b.onclick=()=>openBillingClient(b.dataset.id));
+}
+let editingBC=null;
+function openBillingClient(id){
+  const c=id?B().clients.find(x=>x.id===id):null;editingBC=id||null;
+  $('#bcName').value=c?.raison_sociale||'';$('#bcAddr').value=c?.adresse||'';$('#bcTel').value=c?.telephone||'';
+  $('#bcEmail').value=c?.email||'';$('#bcNinea').value=c?.ninea||'';$('#bcRef').value=c?.reference||'';
+  $('#bcHT').value=c?.montant_ht||'';$('#bcTVA').value=c?.taux_tva??TVA_DEFAUT;$('#bcActif').checked=c?c.actif:true;
+  $('#bcObs').value=c?.observations||'';
+  $('#bcTitle').textContent=c?'Modifier le client':'Nouveau client de facturation';
+  $('#bcDelete').style.display=c?'inline-flex':'none';
+  $('#bcOverlay').classList.add('open');
+}
+async function saveBillingClient(){
+  const name=$('#bcName').value.trim();if(!name){$('#bcName').focus();return;}
+  const row={raison_sociale:name,adresse:$('#bcAddr').value.trim(),telephone:$('#bcTel').value.trim(),
+    email:$('#bcEmail').value.trim(),ninea:$('#bcNinea').value.trim(),reference:$('#bcRef').value.trim(),
+    montant_ht:+$('#bcHT').value||0,taux_tva:+$('#bcTVA').value||0,actif:$('#bcActif').checked,observations:$('#bcObs').value.trim()};
+  if(editingBC){Object.assign(B().clients.find(x=>x.id===editingBC),row);
+    const {error}=await dbWrite(()=>sb.from('billing_clients').update(row).eq('id',editingBC));setSync(!error);}
+  else{const {data,error}=await dbWrite(()=>sb.from('billing_clients').insert(row).select().single());
+    if(!error&&data)B().clients.push(data);setSync(!error);}
+  $('#bcOverlay').classList.remove('open');render();
+}
+async function deleteBillingClient(){
+  if(!editingBC)return;
+  if(B().invoices.some(i=>i.client_id===editingBC)){alert('Impossible : ce client a déjà des factures. Désactivez-le plutôt.');return;}
+  if(!confirm('Supprimer ce client de facturation ?'))return;
+  B().clients=B().clients.filter(x=>x.id!==editingBC);
+  await dbWrite(()=>sb.from('billing_clients').delete().eq('id',editingBC));
+  $('#bcOverlay').classList.remove('open');render();
+}
+
+/* ---------- FACTURES ---------- */
+let invFilter={q:'',statut:'',mois:'',exercice:''};
+function invBalance(inv){return Math.max(0,(+inv.montant_ttc||0)-(+inv.total_paye||0));}
+function invLate(inv){if(inv.statut_paiement==='encaissee'||!inv.date_echeance)return 0;
+  const d=Math.floor((Date.now()-Date.parse(inv.date_echeance))/864e5);return d>0?d:0;}
+function renderInvoices(){
+  if(!isBillingUser()){$('#view-invoices').innerHTML=accessDenied();return;}
+  const exercices=[...new Set(B().invoices.map(i=>i.exercice).filter(Boolean))].sort((a,b)=>b-a);
+  const f=invFilter;
+  let list=B().invoices.slice();
+  if(f.q){const q=f.q.toLowerCase();list=list.filter(i=>(i.numero||'').toLowerCase().includes(q)||(i.client_nom||'').toLowerCase().includes(q));}
+  if(f.statut)list=list.filter(i=>i.statut_paiement===f.statut);
+  if(f.mois)list=list.filter(i=>(''+i.mois)===f.mois);
+  if(f.exercice)list=list.filter(i=>(''+i.exercice)===f.exercice);
+  const statutBadge=i=>{const m={non_encaissee:['Non encaissée','#e5484d'],partiel:['Partielle','#f5a524'],encaissee:['Encaissée','#17803d']}[i.statut_paiement];
+    return `<span style="background:${m[1]}20;color:${m[1]};font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px">${m[0]}</span>`;};
+  $('#view-invoices').innerHTML=`
+    <div class="filters no-print">
+      <div class="search" style="max-width:240px"><input id="invSearch" placeholder="N° facture ou client…" value="${esc(f.q)}"></div>
+      <select id="invStatut"><option value="">Tous statuts</option><option value="non_encaissee" ${f.statut==='non_encaissee'?'selected':''}>Non encaissées</option><option value="partiel" ${f.statut==='partiel'?'selected':''}>Partielles</option><option value="encaissee" ${f.statut==='encaissee'?'selected':''}>Encaissées</option></select>
+      <select id="invMois"><option value="">Tous les mois</option>${MONTHS.map((m,i)=>`<option value="${i+1}" ${f.mois==(i+1)?'selected':''}>${m}</option>`).join('')}</select>
+      <select id="invExercice"><option value="">Tous exercices</option>${exercices.map(e=>`<option value="${e}" ${f.exercice==e?'selected':''}>${e}</option>`).join('')}</select>
+      <button class="btn primary sm" id="invNewBtn">＋ Nouvelle facture</button>
+      <button class="btn sm" id="invGenBtn">⚡ Génération mensuelle</button>
+      <button class="btn sm" id="invExportBtn">⬇ Excel</button>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden"><div class="bt-wrap" style="border:0;box-shadow:none;margin:0">
+    <table class="bt"><thead><tr>
+      <th class="lft">N°</th><th class="lft">Client</th><th>Date</th><th>Échéance</th><th>TTC</th><th>Encaissé</th><th>Solde</th><th>Retard</th><th>Statut</th><th></th>
+    </tr></thead><tbody>
+    ${list.map(i=>{const late=invLate(i);return `<tr>
+      <td class="lft"><b>${esc(i.numero)}</b></td>
+      <td class="lft">${esc(i.client_nom||'')}</td>
+      <td>${i.date_facture?fmtD(i.date_facture):'—'}</td>
+      <td>${i.date_echeance?fmtD(i.date_echeance):'—'}</td>
+      <td><b>${fcfa(i.montant_ttc)}</b></td>
+      <td>${fcfa(i.total_paye)}</td>
+      <td style="color:${invBalance(i)>0?'var(--orange)':'var(--green)'}">${fcfa(invBalance(i))}</td>
+      <td>${late?`<span style="color:var(--red)">${late} j</span>`:'—'}</td>
+      <td>${statutBadge(i)}${i.statut==='annulee'?' <span style="font-size:10px;color:var(--faint)">(annulée)</span>':''}</td>
+      <td style="white-space:nowrap"><button class="btn sm inv-open" data-id="${i.id}">Voir</button> <button class="btn sm inv-pdf" data-id="${i.id}">PDF</button></td>
+    </tr>`;}).join('')||`<tr><td colspan="10" style="padding:16px;color:var(--faint);font-style:italic">Aucune facture.</td></tr>`}
+    </tbody></table></div></div>`;
+  const s=$('#invSearch');if(s)s.oninput=()=>{invFilter.q=s.value;renderInvoices();const i=$('#invSearch');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}};
+  $('#invStatut').onchange=e=>{invFilter.statut=e.target.value;renderInvoices();};
+  $('#invMois').onchange=e=>{invFilter.mois=e.target.value;renderInvoices();};
+  $('#invExercice').onchange=e=>{invFilter.exercice=e.target.value;renderInvoices();};
+  $('#invNewBtn').onclick=()=>openInvoice(null);
+  $('#invGenBtn').onclick=openGenMonth;
+  $('#invExportBtn').onclick=exportInvoicesExcel;
+  $$('#view-invoices .inv-open').forEach(b=>b.onclick=()=>openInvoice(b.dataset.id));
+  $$('#view-invoices .inv-pdf').forEach(b=>b.onclick=()=>invoicePDF(b.dataset.id));
+}
+function accessDenied(){return '<div class="empty-state">Accès réservé aux utilisateurs de la facturation.</div>';}
+function isBillingUser(){return me&&(me.role==='admin'||me.role==='assistante');}
+
+/* ---------- Numérotation automatique ---------- */
+async function nextInvoiceNumber(exercice){
+  /* on calcule d'après les factures existantes de l'exercice + un compteur */
+  const nums=B().invoices.filter(i=>i.exercice===exercice).map(i=>{const m=(i.numero||'').match(/(\d+)$/);return m?+m[1]:0;});
+  const next=(nums.length?Math.max(...nums):0)+1;
+  return 'FAC-'+exercice+'-'+String(next).padStart(4,'0');
+}
+
+/* ---------- Création / édition d'une facture ---------- */
+let editingInv=null;
+function recalcInvModal(){
+  const ht=+$('#ivHT').value||0,tva=+$('#ivTVA').value||0;
+  const mtva=ht*tva/100,ttc=ht+mtva;
+  $('#ivTVAmt').textContent=fcfa(mtva);$('#ivTTC').textContent=fcfa(ttc);
+}
+function openInvoice(id){
+  const inv=id?B().invoices.find(x=>x.id===id):null;editingInv=id||null;
+  const cy=new Date().getFullYear();
+  /* liste clients pour sélection */
+  $('#ivClient').innerHTML='<option value="">— Choisir un client —</option>'+B().clients.map(c=>`<option value="${c.id}" ${inv&&inv.client_id===c.id?'selected':''}>${esc(c.raison_sociale)}</option>`).join('');
+  $('#ivDesignation').value=inv?.designation||'Prestations comptables';
+  $('#ivEquipe').value=inv?.equipe||'';
+  $('#ivPeriode').value=inv?.periode||'';
+  $('#ivMois').value=inv?.mois||(new Date().getMonth()+1);
+  $('#ivExercice').value=inv?.exercice||cy;
+  $('#ivDateF').value=inv?.date_facture||iso(new Date());
+  $('#ivDateE').value=inv?.date_echeance||'';
+  $('#ivHT').value=inv?.montant_ht||'';$('#ivTVA').value=inv?.taux_tva??TVA_DEFAUT;
+  recalcInvModal();
+  const validated=inv&&inv.statut!=='brouillon';
+  const ro=validated&&me.role!=='admin';   /* assistante : modif seulement tant que brouillon */
+  ['ivClient','ivDesignation','ivEquipe','ivPeriode','ivMois','ivExercice','ivDateF','ivDateE','ivHT','ivTVA'].forEach(f=>{const e=$('#'+f);if(e)e.disabled=ro;});
+  $('#ivTitle').textContent=inv?`Facture ${inv.numero}`:'Nouvelle facture';
+  $('#ivStatutInfo').innerHTML=inv?`Statut : <b>${inv.statut}</b> · Paiement : <b>${inv.statut_paiement}</b>${ro?' · <span style="color:var(--orange)">lecture seule (validée)</span>':''}`:'';
+  $('#ivValidate').style.display=(inv&&inv.statut==='brouillon')?'inline-flex':'none';
+  $('#ivCancel2').style.display=(inv&&inv.statut!=='annulee'&&me.role==='admin')?'inline-flex':'none';
+  $('#ivPayBtn').style.display=(inv&&inv.statut==='validee'&&inv.statut_paiement!=='encaissee')?'inline-flex':'none';
+  $('#ivSave').style.display=ro?'none':'inline-flex';
+  renderInvPayments(inv);
+  $('#invoiceOverlay').classList.add('open');
+}
+function renderInvPayments(inv){
+  const box=$('#ivPayments');if(!box)return;
+  if(!inv){box.innerHTML='';return;}
+  const pays=B().payments.filter(p=>p.invoice_id===inv.id);
+  box.innerHTML=`<div style="border-top:1px solid var(--line);padding-top:10px;margin-top:6px">
+    <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px">
+      <span>Total payé : <b style="color:var(--green)">${fcfa(inv.total_paye)}</b></span>
+      <span>Reste : <b style="color:${invBalance(inv)>0?'var(--orange)':'var(--green)'}">${fcfa(invBalance(inv))}</b></span></div>
+    ${pays.length?pays.map(p=>`<div style="font-size:12.5px;padding:4px 0;border-bottom:1px solid #eef1f6;display:flex;justify-content:space-between">
+      <span>${fmtD(p.date_reglement)} · ${MODES_PAY[p.mode]||p.mode}${p.reference?' · '+esc(p.reference):''}</span><b>${fcfa(p.montant)}</b></div>`).join(''):'<div style="font-size:12px;color:var(--faint);font-style:italic">Aucun encaissement.</div>'}
+  </div>`;
+}
+async function saveInvoice(){
+  const cid=$('#ivClient').value;if(!cid){alert('Choisissez un client.');return;}
+  const c=B().clients.find(x=>x.id===cid);
+  const ht=+$('#ivHT').value||0,tva=+$('#ivTVA').value||0;const mtva=ht*tva/100,ttc=ht+mtva;
+  const exercice=+$('#ivExercice').value||new Date().getFullYear();
+  const mois=+$('#ivMois').value||null;
+  const base={client_id:cid,client_nom:c.raison_sociale,client_adresse:c.adresse,client_telephone:c.telephone,client_ninea:c.ninea,
+    designation:$('#ivDesignation').value.trim(),equipe:$('#ivEquipe').value.trim(),periode:$('#ivPeriode').value.trim(),mois,exercice,
+    date_facture:$('#ivDateF').value||iso(new Date()),date_echeance:$('#ivDateE').value||null,
+    montant_ht:ht,taux_tva:tva,montant_tva:mtva,montant_ttc:ttc};
+  if(editingInv){
+    Object.assign(B().invoices.find(x=>x.id===editingInv),base);
+    const {error}=await dbWrite(()=>sb.from('invoices').update(base).eq('id',editingInv));
+    if(error){alert('Erreur : '+error.message);return;}
+    invLog(B().invoices.find(x=>x.id===editingInv),'Modification');
+  }else{
+    /* anti-doublon client+mois+exercice */
+    if(B().invoices.some(i=>i.client_id===cid&&i.mois===mois&&i.exercice===exercice&&i.statut!=='annulee')){
+      alert('Une facture existe déjà pour ce client sur ce mois et cet exercice.');return;}
+    base.numero=await nextInvoiceNumber(exercice);base.statut='brouillon';base.statut_paiement='non_encaissee';base.total_paye=0;base.created_by=me.id;
+    const {data,error}=await dbWrite(()=>sb.from('invoices').insert(base).select().single());
+    if(error){alert('Erreur : '+error.message);return;}
+    B().invoices.unshift(data);editingInv=data.id;invLog(data,'Création');
+  }
+  setSync(true);$('#invoiceOverlay').classList.remove('open');render();
+}
+async function validateInvoice(){
+  const inv=B().invoices.find(x=>x.id===editingInv);if(!inv)return;
+  inv.statut='validee';
+  await dbWrite(()=>sb.from('invoices').update({statut:'validee'}).eq('id',inv.id));
+  invLog(inv,'Validation');setSync(true);$('#invoiceOverlay').classList.remove('open');render();
+}
+async function cancelInvoice(){
+  const inv=B().invoices.find(x=>x.id===editingInv);if(!inv)return;
+  if(!confirm('Annuler cette facture ? Elle restera visible mais marquée annulée.'))return;
+  inv.statut='annulee';
+  await dbWrite(()=>sb.from('invoices').update({statut:'annulee'}).eq('id',inv.id));
+  invLog(inv,'Annulation');setSync(true);$('#invoiceOverlay').classList.remove('open');render();
+}
+
+/* ---------- Encaissements ---------- */
+function openPayment(){
+  const inv=B().invoices.find(x=>x.id===editingInv);if(!inv)return;
+  $('#pyDate').value=iso(new Date());$('#pyMode').value='virement';$('#pyRef').value='';
+  $('#pyMontant').value=invBalance(inv)||'';$('#pyObs').value='';
+  $('#pyReste').textContent=fcfa(invBalance(inv));
+  $('#paymentOverlay').classList.add('open');
+}
+async function savePayment(){
+  const inv=B().invoices.find(x=>x.id===editingInv);if(!inv)return;
+  const montant=+$('#pyMontant').value||0;if(montant<=0){alert('Montant invalide.');return;}
+  const row={invoice_id:inv.id,date_reglement:$('#pyDate').value||iso(new Date()),mode:$('#pyMode').value,
+    reference:$('#pyRef').value.trim(),montant,observations:$('#pyObs').value.trim(),created_by:me.id};
+  const {data,error}=await dbWrite(()=>sb.from('payments').insert(row).select().single());
+  if(error){alert('Erreur : '+error.message);return;}
+  B().payments.unshift(data);
+  /* recalcul du total payé + statut */
+  inv.total_paye=(+inv.total_paye||0)+montant;
+  if(inv.total_paye>=(+inv.montant_ttc||0)-0.5)inv.statut_paiement='encaissee';
+  else if(inv.total_paye>0)inv.statut_paiement='partiel';
+  await dbWrite(()=>sb.from('invoices').update({total_paye:inv.total_paye,statut_paiement:inv.statut_paiement}).eq('id',inv.id));
+  invLog(inv,`Encaissement ${fcfa(montant)} (${MODES_PAY[row.mode]})`);
+  setSync(true);$('#paymentOverlay').classList.remove('open');
+  renderInvPayments(inv);openInvoice(inv.id);render();
+}
+
+/* ---------- Génération mensuelle automatique ---------- */
+function openGenMonth(){
+  const cy=new Date().getFullYear();
+  $('#genMois').value=new Date().getMonth()+1;$('#genExercice').value=cy;$('#genEcheance').value='30';
+  const actifs=B().clients.filter(c=>c.actif&&(+c.montant_ht||0)>0).length;
+  $('#genInfo').textContent=`${actifs} client(s) actif(s) seront facturés.`;
+  $('#genOverlay').classList.add('open');
+}
+async function runGenMonth(){
+  const mois=+$('#genMois').value,exercice=+$('#genExercice').value,delai=+$('#genEcheance').value||30;
+  const actifs=B().clients.filter(c=>c.actif&&(+c.montant_ht||0)>0);
+  let created=0,skipped=0;
+  for(const c of actifs){
+    if(B().invoices.some(i=>i.client_id===c.id&&i.mois===mois&&i.exercice===exercice&&i.statut!=='annulee')){skipped++;continue;}
+    const ht=+c.montant_ht||0,tva=+c.taux_tva||0,mtva=ht*tva/100,ttc=ht+mtva;
+    const df=new Date();const de=new Date();de.setDate(de.getDate()+delai);
+    const row={numero:await nextInvoiceNumber(exercice),client_id:c.id,client_nom:c.raison_sociale,client_adresse:c.adresse,
+      client_telephone:c.telephone,client_ninea:c.ninea,designation:'Prestations comptables',
+      periode:MONTHS[mois-1]+' '+exercice,mois,exercice,date_facture:iso(df),date_echeance:iso(de),
+      montant_ht:ht,taux_tva:tva,montant_tva:mtva,montant_ttc:ttc,statut:'brouillon',statut_paiement:'non_encaissee',total_paye:0,created_by:me.id};
+    const {data,error}=await dbWrite(()=>sb.from('invoices').insert(row).select().single());
+    if(!error&&data){B().invoices.unshift(data);invLog(data,'Création (génération mensuelle)');created++;}
+  }
+  setSync(true);$('#genOverlay').classList.remove('open');render();
+  alert(`Génération terminée.\n${created} facture(s) créée(s).${skipped?`\n${skipped} ignorée(s) (déjà existantes).`:''}`);
+}
+
+/* ---------- PDF de facture ---------- */
+async function invoicePDF(id){
+  const inv=B().invoices.find(x=>x.id===id);if(!inv)return;
+  if(!await waitLib(()=>!!window.jspdf,'PDF'))return;
+  const {jsPDF}=window.jspdf;const doc=new jsPDF({unit:'mm',format:'a4'});
+  const W=210,M=18;let y=14;
+  try{doc.addImage(CMD_LOGO,'PNG',M,y,46,21);}catch(e){}
+  doc.setFontSize(8);doc.setTextColor(21,96,189);doc.setFont(undefined,'italic');
+  doc.text('Expertise comptable \u2022 Audit \u2022 Conseils',W-M,y+7,{align:'right'});
+  doc.text('Commissariat aux comptes \u2022 Formation et assistance PME \u2022 SARL',W-M,y+11,{align:'right'});
+  y+=26;doc.setDrawColor(21,96,189);doc.setLineWidth(0.5);doc.line(M,y,W-M,y);y+=10;
+  doc.setTextColor(0,0,0);doc.setFont(undefined,'normal');doc.setFontSize(10.5);
+  const dloc=inv.date_facture?new Date(inv.date_facture+'T00:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}):'';
+  doc.text('Dakar, le '+dloc,W-M,y,{align:'right'});y+=10;
+  doc.setFont(undefined,'bold');doc.text(inv.client_nom||'',W-M,y,{align:'right'});y+=5;doc.setFont(undefined,'normal');
+  if(inv.client_adresse){doc.text(inv.client_adresse,W-M,y,{align:'right',maxWidth:90});y+=5;}
+  doc.text('Dakar S\u00e9n\u00e9gal',W-M,y,{align:'right'});y+=14;
+  doc.setFont(undefined,'bold');doc.setFontSize(15);doc.text('FACTURE',W/2,y,{align:'center'});y+=6;
+  doc.setFontSize(11);doc.text('N\u00b0 '+inv.numero,W/2,y,{align:'center'});y+=10;
+  doc.setFont(undefined,'normal');
+  const c0=M,c1=M+42,c2=W-M-58,c3=W-M-30,cEnd=W-M;
+  const th=(x,w,txt)=>{doc.text(txt,x+2,y+5,{maxWidth:w-4});};
+  doc.setFillColor(230,236,247);doc.setDrawColor(120,120,120);doc.setLineWidth(0.2);
+  doc.rect(c0,y,cEnd-c0,8,'FD');doc.setFont(undefined,'bold');doc.setFontSize(7.5);
+  th(c0,c1-c0,'\u00c9QUIPE DE MISSION');th(c1,c2-c1,'OBJET / D\u00c9TAILS');th(c2,c3-c2,"Nbre d'heures");th(c3,cEnd-c3,'MONTANT');
+  [c1,c2,c3].forEach(x=>doc.line(x,y,x,y+8));y+=8;
+  doc.setFont(undefined,'normal');doc.setFontSize(9);
+  const equipe=(inv.equipe||'').split('\n').map(s=>s.trim()).filter(Boolean);
+  const rowH=9;
+  const bodyRows=[
+    {obj:(inv.designation||'Assistance Comptable')+(inv.periode?' '+inv.periode:''),h:'Forfait',mt:fcfa(inv.montant_ht)},
+    {obj:'Montant Hors TVA',h:'',mt:''},
+    {obj:'TVA 18%',h:'',mt:fcfa(inv.montant_tva)},
+  ];
+  const startBody=y;
+  bodyRows.forEach((r)=>{
+    doc.rect(c0,y,c1-c0,rowH);doc.rect(c1,y,c2-c1,rowH);doc.rect(c2,y,c3-c2,rowH);doc.rect(c3,y,cEnd-c3,rowH);
+    doc.text(r.obj,c1+2,y+6,{maxWidth:c2-c1-4});
+    if(r.h)doc.text(r.h,c2+2,y+6);
+    if(r.mt)doc.text(r.mt,cEnd-2,y+6,{align:'right'});
+    y+=rowH;
+  });
+  doc.text(equipe.length?equipe.join('\n'):'', c0+2, startBody+6, {maxWidth:c1-c0-4});
+  doc.setFillColor(230,236,247);doc.rect(c0,y,cEnd-c0,9,'FD');
+  doc.setFont(undefined,'bold');doc.setFontSize(10);
+  doc.text('Total TTC FCFA',c1+2,y+6);doc.text(fcfa(inv.montant_ttc),cEnd-2,y+6,{align:'right'});
+  [c1,c2,c3].forEach(x=>doc.line(x,y,x,y+9));y+=17;
+  doc.setFont(undefined,'normal');doc.setFontSize(10);
+  const lettres=enLettres(inv.montant_ttc);
+  doc.text('Montant : '+lettres.charAt(0).toUpperCase()+lettres.slice(1)+' Francs CFA TTC',M,y,{maxWidth:W-2*M});y+=7;
+  doc.text("Veuillez libeller votre r\u00e8glement \u00e0 l'ordre de : Monsieur Mor DIENG",M,y,{maxWidth:W-2*M});y+=12;
+  doc.setFont(undefined,'bold');doc.setFillColor(230,236,247);doc.rect(M,y,60,8,'FD');doc.text('MODE DE PAIEMENT',M+2,y+5.5);y+=8;
+  doc.setFont(undefined,'normal');doc.rect(M,y,60,8);doc.text('Cash \u00e0 r\u00e9ception',M+2,y+5.5);
+  doc.setDrawColor(21,96,189);doc.line(M,276,W-M,276);
+  doc.setFontSize(6.5);doc.setTextColor(60,60,60);
+  const pied=['Point E Rue de Thi\u00e8s X rue de Fatick 2\u00e8me Etage Immeuble R+3',
+    'BP 6141 bureau de poste Dakar-Etoile \u2022 Dakar (S\u00e9n\u00e9gal)',
+    'T\u00e9l / Fax : +221.33.864.76.00 \u2022 cabinetmdieng@orange.sn',
+    'RC: SN-DKR-2012-B-4754 \u2022 NINEA: 004552544 2S2-IRTSS: 00056983 \u2022 SARL-Capital 1.000.000 FCFA'];
+  let py=280;pied.forEach(l=>{doc.text(l,W/2,py,{align:'center'});py+=3;});
+  doc.save(inv.numero+'.pdf');
+  invLog(inv,'T\u00e9l\u00e9chargement PDF');
+}
+
+/* ---------- Dashboard recouvrement ---------- */
+function renderBillingDash(){
+  if(!isBillingUser()){$('#view-billing_dash').innerHTML=accessDenied();return;}
+  const inv=B().invoices.filter(i=>i.statut!=='annulee');
+  const caFacture=inv.reduce((a,i)=>a+(+i.montant_ttc||0),0);
+  const encaisse=inv.reduce((a,i)=>a+(+i.total_paye||0),0);
+  const reste=caFacture-encaisse;
+  const echues=inv.filter(i=>invLate(i)>0&&i.statut_paiement!=='encaissee').length;
+  const attente=inv.filter(i=>i.statut_paiement!=='encaissee').length;
+  const taux=caFacture>0?Math.round(encaisse/caFacture*100):0;
+  const kpis=`<div class="grid-kpi">
+    ${kpi('CA facturé',fcfa(caFacture),'blue')}${kpi('Total encaissé',fcfa(encaisse),'good')}
+    ${kpi('Reste à recouvrer',fcfa(reste),reste>0?'alert':'')}${kpi('Taux de recouvrement',taux+'%',taux>=70?'good':'')}
+    ${kpi('Factures',inv.length,'')}${kpi('Échues',echues,echues?'alert':'')}${kpi('En attente',attente,'')}
+  </div>`;
+  /* tableau de recouvrement */
+  const rows=inv.slice().sort((a,b)=>invLate(b)-invLate(a)).map(i=>{const late=invLate(i);
+    const col=i.statut_paiement==='encaissee'?'#17803d':i.statut_paiement==='partiel'?'#f5a524':'#e5484d';
+    return `<tr>
+      <td class="lft"><b>${esc(i.numero)}</b></td><td class="lft">${esc(i.client_nom||'')}</td>
+      <td>${i.date_echeance?fmtD(i.date_echeance):'—'}</td>
+      <td>${fcfa(i.montant_ttc)}</td><td>${fcfa(i.total_paye)}</td>
+      <td style="color:${invBalance(i)>0?'var(--orange)':'var(--green)'}">${fcfa(invBalance(i))}</td>
+      <td>${late?`<span style="color:var(--red)">${late} j</span>`:'—'}</td>
+      <td><span style="width:10px;height:10px;border-radius:99px;background:${col};display:inline-block"></span></td>
+    </tr>`;}).join('');
+  $('#view-billing_dash').innerHTML=`${kpis}
+    <div class="card" style="padding:0;overflow:hidden;margin-top:16px">
+      <h3 style="padding:14px 16px 0">Tableau de recouvrement</h3>
+      <div class="bt-wrap" style="border:0;box-shadow:none;margin:0"><table class="bt"><thead><tr>
+        <th class="lft">N°</th><th class="lft">Client</th><th>Échéance</th><th>TTC</th><th>Encaissé</th><th>Solde</th><th>Retard</th><th></th>
+      </tr></thead><tbody>${rows||`<tr><td colspan="8" style="padding:16px;color:var(--faint);font-style:italic">Aucune facture.</td></tr>`}</tbody></table></div>
+    </div>
+    <div style="margin-top:8px"><button class="btn sm" id="bdExportRecouv">⬇ Situation des encaissements (Excel)</button></div>`;
+  const be=$('#bdExportRecouv');if(be)be.onclick=exportRecouvrement;
+}
+
+/* ---------- Exports ---------- */
+function exportInvoicesExcel(){
+  const rows=[['N°','Client','Date','Échéance','HT','TVA','TTC','Encaissé','Solde','Statut paiement','Statut']];
+  B().invoices.forEach(i=>rows.push([i.numero,i.client_nom,i.date_facture,i.date_echeance||'',+i.montant_ht||0,+i.montant_tva||0,+i.montant_ttc||0,+i.total_paye||0,invBalance(i),i.statut_paiement,i.statut]));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),'Factures');
+  XLSX.writeFile(wb,'factures_'+iso(new Date())+'.xlsx');
+}
+function exportRecouvrement(){
+  const rows=[['N°','Client','Échéance','TTC','Encaissé','Solde','Jours retard','Statut']];
+  B().invoices.filter(i=>i.statut!=='annulee').forEach(i=>rows.push([i.numero,i.client_nom,i.date_echeance||'',+i.montant_ttc||0,+i.total_paye||0,invBalance(i),invLate(i),i.statut_paiement]));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),'Recouvrement');
+  XLSX.writeFile(wb,'recouvrement_'+iso(new Date())+'.xlsx');
+}
+
 function renderHistory(){
   $('#view-history').innerHTML=`<div class="card">${
     DB.history.length?DB.history.map(h=>`
@@ -2348,7 +2890,7 @@ function renderAdmin(){
           <td><b>${esc(p.full_name)}</b>${p.id===me.id?' <span style="color:var(--faint);font-size:11px">(vous)</span>':''}</td>
           <td style="color:var(--muted)">${esc(p.job_title)||'—'}</td>
           <td style="color:var(--muted)">${esc(p.username)}</td>
-          <td><span class="badge-role ${p.role==='admin'?'admin':''}">${p.role==='admin'?'Admin':'Collaborateur'}</span></td>
+          <td><span class="badge-role ${p.role==='admin'?'admin':''}">${p.role==='admin'?'Admin':p.role==='assistante'?'Assistante':'Collaborateur'}</span></td>
           <td>${DB.clients.filter(c=>c.responsible_id===p.id).length}</td>
           <td style="white-space:nowrap;display:flex;gap:6px;justify-content:flex-end">
             <button class="btn sm editUserBtn" data-id="${p.id}">✎ Modifier</button>
@@ -2364,7 +2906,7 @@ function renderAdmin(){
         <div class="fld"><label>Fonction (poste)</label><input id="nuJob" placeholder="Ex : Assistante comptable"></div>
         <div class="fld"><label>Nom d'utilisateur (connexion)</label><input id="nuUser" placeholder="ccisse"></div>
         <div class="fld"><label>Mot de passe (8 caractères min.)</label><input id="nuPass" type="text" placeholder="À communiquer au collaborateur"></div>
-        <div class="fld"><label>Rôle</label><select id="nuRole"><option value="collab">Collaborateur</option><option value="admin">Administrateur</option></select></div>
+        <div class="fld"><label>Rôle</label><select id="nuRole"><option value="collab">Collaborateur</option><option value="assistante">Assistante (facturation)</option><option value="admin">Administrateur</option></select></div>
       </div>
       <div class="auth-err" id="nuErr" style="display:none"></div>
       <button class="btn primary" id="nuBtn" style="margin-top:12px">Créer le compte</button>
@@ -2711,6 +3253,24 @@ function mdToHtml(md){
   if(inList)html+='</ul>';
   return html;
 }
+
+/* ================= FACTURATION — branchements ================= */
+(function(){
+  /* remplir les selects de mois */
+  const opts=MONTHS.map((m,i)=>`<option value="${i+1}">${m}</option>`).join('');
+  ['ivMois','genMois'].forEach(id=>{const e=$('#'+id);if(e)e.innerHTML=opts;});
+  window._bcTTC=()=>{};
+  const bind=(id,fn)=>{const e=$('#'+id);if(e)e.onclick=fn;};
+  bind('bcCancel',()=>$('#bcOverlay').classList.remove('open'));
+  bind('bcSave',saveBillingClient);bind('bcDelete',deleteBillingClient);
+  bind('ivClose',()=>$('#invoiceOverlay').classList.remove('open'));
+  bind('ivSave',saveInvoice);bind('ivValidate',validateInvoice);bind('ivCancel2',cancelInvoice);bind('ivPayBtn',openPayment);
+  bind('pyCancel',()=>$('#paymentOverlay').classList.remove('open'));bind('pySave',savePayment);
+  bind('genCancel',()=>$('#genOverlay').classList.remove('open'));bind('genRun',runGenMonth);
+  [['bcOverlay'],['invoiceOverlay'],['paymentOverlay'],['genOverlay']].forEach(([id])=>{
+    const o=$('#'+id);if(o)o.onclick=e=>{if(e.target===o)o.classList.remove('open');};
+  });
+})();
 
 /* ================= PROFIL / MOT DE PASSE ================= */
 /* Filet de sécurité : si les bibliothèques d'export ne sont pas chargées
