@@ -803,14 +803,12 @@ async function enter(){
 function authErr(sel,msg){const e=$(sel);e.textContent=msg;e.style.display='block';}
 async function loadAll(){
   try{
-    const [p,c,t,h,j,m,pc,bs,mt,cm,nt,ch,cr]=await Promise.all([
+    const [p,c,t,h,j,bs,mt,cm,nt,ch,cr]=await Promise.all([
       sb.from('profiles').select('*').order('full_name'),
       sb.from('clients').select('*').order('name'),
       sb.from('tasks').select('*').order('num'),
       sb.from('task_history').select('*').order('ts',{ascending:false}).limit(300),
       sb.from('journals').select('*').order('position').order('code'),
-      sb.from('journal_months').select('*'),
-      sb.from('piece_counts').select('*').order('week_date'),
       sb.from('base_status').select('*'),
       sb.from('meetings').select('*').order('meeting_date',{ascending:false}),
       sb.from('task_comments').select('*').order('created_at'),
@@ -818,11 +816,27 @@ async function loadAll(){
       sb.from('chat_messages').select('*').order('created_at').limit(500),
       sb.from('chat_reads').select('*'),
     ]);
-    for(const r of [p,c,t,h,j,m,pc,bs,mt,cm,nt,ch,cr])if(r.error)throw r.error;
+    for(const r of [p,c,t,h,j,bs,mt,cm,nt,ch,cr])if(r.error)throw r.error;
+    /* Tables potentiellement volumineuses : on récupère TOUTES les lignes
+       (Supabase plafonne à 1000 par requête -> pagination). */
+    const m={data:await fetchAllRows('journal_months')};
+    const pc={data:await fetchAllRows('piece_counts')};
     DB={profiles:p.data,clients:c.data,tasks:t.data,history:h.data,journals:j.data,months:m.data,counts:pc.data,
         baseStatus:bs.data,meetings:mt.data,comments:cm.data,notifs:nt.data,chat:ch.data,reads:cr.data};
     setSync(true);
   }catch(e){console.error(e);setSync(false);}
+}
+/* Récupère toutes les lignes d'une table par tranches de 1000 */
+async function fetchAllRows(table){
+  const out=[];const step=1000;let from=0;
+  for(let i=0;i<50;i++){
+    const {data,error}=await sb.from(table).select('*').range(from,from+step-1);
+    if(error){console.error('fetchAllRows',table,error);break;}
+    out.push(...(data||[]));
+    if(!data||data.length<step)break;
+    from+=step;
+  }
+  return out;
 }
 let rtTimer=null;
 function startRealtime(){
