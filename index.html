@@ -832,13 +832,16 @@ function startRealtime(){
     rtChannel.on('postgres_changes',{event:'*',schema:'public',table:tb},()=>{
       clearTimeout(rtTimer);rtTimer=setTimeout(async()=>{
         const onChat=currentView==='chat';const active=document.activeElement===$('#chatInput');
-        const onBases=currentView==='bases';const editingCell=document.activeElement&&document.activeElement.tagName==='INPUT';
+        const onBases=currentView==='bases';
         await loadAll();
         if(onChat){
           if(chatChannel!=='ia'&&active)await markRead(chatChannel);
           renderChat();
-        }else if(onBases&&editingCell){
-          /* on ne reconstruit pas la grille pendant une saisie active */
+        }else if(onBases){
+          /* Sur le suivi des bases, on NE reconstruit PAS la grille automatiquement :
+             cela effacerait une croix/saisie que l'utilisateur vient de faire (course
+             avec l'enregistrement). Les données sont à jour en mémoire ; l'affichage
+             se rafraîchira au prochain changement de dossier/vue. */
         }else render();
       },700);
     }));
